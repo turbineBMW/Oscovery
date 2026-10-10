@@ -220,6 +220,7 @@ impl OscoveryWindow {
         match section {
             "timeline" => imp.timeline_page.ensure_loaded(),
             "discover" => imp.discover_page.focus_prompt(),
+            "browse" => imp.browse_page.focus_search(),
             _ => {}
         }
     }
