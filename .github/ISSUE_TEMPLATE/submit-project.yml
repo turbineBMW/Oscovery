@@ -1,14 +1,23 @@
 name: Submit a project
-description: Add an Omarchy app or plugin to the Oscovery catalog
+description: Add your Omarchy app or plugin to the Oscovery catalog
 title: "Submit: "
 labels: [submission]
 body:
   - type: markdown
     attributes:
       value: |
-        Plugins listed on plugins.omarchy.org and repositories tagged with the `omarchy`,
-        `omarchy-plugin` or `omarchy-app` topic are picked up automatically every day. Use
-        this form for anything else, or to flag that you are looking for contributors.
+        Oscovery lists projects whose authors opted in. These are picked up
+        automatically every day, with nothing to submit:
+
+        - plugins listed on plugins.omarchy.org;
+        - repositories with an `oscovery.toml` at the root of the default branch
+          (an empty file is enough; see the README for the fields);
+        - repositories tagged with the `omarchy-plugin` or `omarchy-app` topic.
+
+        Use this form when code search hasn't seen your `oscovery.toml` yet, or to
+        flag that you are looking for contributors. **Only submit a repository you
+        own**: a submission is listed when the person opening this issue owns the
+        repository, or the repository has an `oscovery.toml` or an opt-in topic.
   - type: input
     id: repo
     attributes:
@@ -25,6 +34,13 @@ body:
         - An Omarchy shell plugin
     validations:
       required: true
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Consent
+      options:
+        - label: I maintain this repository and want it listed in Oscovery
+          required: true
   - type: checkboxes
     id: contributors
     attributes:

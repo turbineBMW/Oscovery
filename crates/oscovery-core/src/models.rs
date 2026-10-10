@@ -128,7 +128,7 @@ pub struct Entry {
     #[serde(default)]
     pub updated_at: Option<DateTime<Utc>>,
     /// The author asked for help: an `omarchy-wants-contributors` topic, an
-    /// `.oscovery.toml`, or the submission form.
+    /// `oscovery.toml`, or the submission form.
     #[serde(default)]
     pub wants_contributors: bool,
     /// Which crawl produced it: `marketplace`, `github`, `aur`, `submitted`.

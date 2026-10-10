@@ -1,14 +1,21 @@
-//! GitHub: repositories under the `omarchy`, `omarchy-plugin` and
-//! `omarchy-app` topics, filtered by a quality floor, classified by what
-//! their root holds, with a README excerpt.
+//! GitHub: repositories that opted in, either with an `oscovery.toml` at
+//! their root or with the `omarchy-plugin` / `omarchy-app` topic (the topic
+//! ones also pass a quality floor), classified by what their root holds,
+//! with a README excerpt. The broad `omarchy` topic is not crawled: it is
+//! full of personal setups that were never meant for a catalog.
 
 use crate::{Http, readme};
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use oscovery_core::models::{Entry, Install, InstallMethod, Kind};
 use serde::Deserialize;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
-const QUERIES: [&str; 3] = ["topic:omarchy", "topic:omarchy-plugin", "topic:omarchy-app"];
+/// Topics that mean "find this": a repository under one is listed unless it
+/// opts out.
+pub const OPT_IN_TOPICS: [&str; 2] = ["omarchy-plugin", "omarchy-app"];
+/// The file at a repository's root that opts it in (and, with
+/// `listed = false`, out).
+pub const MANIFEST: &str = "oscovery.toml";
 /// GitHub search returns at most this many per query.
 const SEARCH_CAP: usize = 1000;
 /// Pushed longer ago than this and a project is left out.
@@ -86,12 +93,185 @@ struct Manifest {
     kinds: Vec<String>,
 }
 
+/// `oscovery.toml`: being there opts a repository in. Every field is
+/// optional and corrects what the crawl would otherwise guess.
+#[derive(Debug, Deserialize)]
+pub struct OscoveryToml {
+    /// `false` keeps the project out of the catalog, whichever source found it.
+    #[serde(default = "listed_by_default")]
+    pub listed: bool,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub category: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub wants_contributors: bool,
+    /// Full-size images (https), the first doubling as the card's.
+    #[serde(default)]
+    pub previews: Vec<String>,
+    /// An app's install method: `install-script`, `github-release` or
+    /// `manual`. Only the method: the app builds the command itself.
+    #[serde(default)]
+    pub install: Option<InstallMethod>,
+    #[serde(default)]
+    pub install_note: String,
+}
+
+fn listed_by_default() -> bool {
+    true
+}
+
+/// At most this many previews from a manifest.
+const MAX_PREVIEWS: usize = 8;
+
+impl OscoveryToml {
+    /// A manifest that doesn't parse keeps the project out: it may well
+    /// have said `listed = false`.
+    pub fn parse(text: &str, repo: &str) -> Self {
+        toml::from_str(text).unwrap_or_else(|error| {
+            eprintln!("{repo}: {MANIFEST}: {error}; leaving it out");
+            Self {
+                listed: false,
+                ..toml::from_str("").expect("an empty manifest")
+            }
+        })
+    }
+
+    pub fn apply(&self, entry: &mut Entry) {
+        if !self.name.trim().is_empty() {
+            entry.name = self.name.trim().to_string();
+        }
+        if !self.summary.trim().is_empty() {
+            entry.summary = self.summary.trim().to_string();
+        }
+        if !self.category.trim().is_empty() {
+            entry.category = self.category.trim().to_string();
+        }
+        for tag in &self.tags {
+            let tag = tag.trim().to_lowercase();
+            if !tag.is_empty() && !entry.tags.contains(&tag) {
+                entry.tags.push(tag);
+            }
+        }
+        entry.wants_contributors |= self.wants_contributors;
+        let previews: Vec<String> = self
+            .previews
+            .iter()
+            .filter(|url| url.starts_with("https://"))
+            .take(MAX_PREVIEWS)
+            .cloned()
+            .collect();
+        if let Some(first) = previews.first() {
+            entry.thumbnail = first.clone();
+            entry.previews = previews;
+        }
+        if entry.kind != Kind::App {
+            return;
+        }
+        match self.install {
+            Some(
+                method @ (InstallMethod::InstallScript
+                | InstallMethod::GithubRelease
+                | InstallMethod::Manual),
+            ) => {
+                entry.subkind = match method {
+                    InstallMethod::GithubRelease => "github-release",
+                    _ => "source",
+                }
+                .into();
+                entry.install = Some(Install {
+                    method,
+                    command: match method {
+                        InstallMethod::InstallScript => {
+                            format!("git clone {} && sh install.sh", entry.repo)
+                        }
+                        _ => String::new(),
+                    },
+                    note: self.install_note.trim().to_string(),
+                });
+            }
+            Some(other) => eprintln!(
+                "{}: {MANIFEST}: install = {other:?} is not taken from a manifest",
+                entry.id
+            ),
+            None => {
+                if let Some(install) = &mut entry.install
+                    && !self.install_note.trim().is_empty()
+                {
+                    install.note = self.install_note.trim().to_string();
+                }
+            }
+        }
+    }
+}
+
+/// A repository's `oscovery.toml`, when it has one.
+pub async fn manifest(http: &Http, full_name: &str, branch: &str) -> Option<OscoveryToml> {
+    let url = format!("https://raw.githubusercontent.com/{full_name}/{branch}/{MANIFEST}");
+    let text = http.get_text(&url).await?;
+    Some(OscoveryToml::parse(&text, full_name))
+}
+
+#[derive(Deserialize)]
+struct CodePage {
+    items: Vec<CodeHit>,
+}
+
+#[derive(Deserialize)]
+struct CodeHit {
+    path: String,
+    repository: CodeRepo,
+}
+
+#[derive(Deserialize)]
+struct CodeRepo {
+    full_name: String,
+}
+
+/// Every repository with an `oscovery.toml` at its root. Code search needs
+/// a token and only sees default branches, and a new file can take a while
+/// to show up; the submission form covers the gap.
+pub async fn opted_in(http: &Http) -> Vec<Repo> {
+    let mut names = BTreeSet::new();
+    for page in 1..=SEARCH_CAP / 100 {
+        let url = format!(
+            "https://api.github.com/search/code?q=filename:{MANIFEST}&per_page=100&page={page}"
+        );
+        let Some(found) = http.get_json::<CodePage>(&url).await else {
+            break;
+        };
+        let count = found.items.len();
+        names.extend(
+            found
+                .items
+                .into_iter()
+                .filter(|hit| hit.path == MANIFEST)
+                .map(|hit| hit.repository.full_name),
+        );
+        if count < 100 {
+            break;
+        }
+    }
+    let mut repos = Vec::new();
+    for name in names {
+        let url = format!("https://api.github.com/repos/{name}");
+        if let Some(repo) = http.get_json::<Repo>(&url).await {
+            repos.push(repo);
+        }
+    }
+    repos
+}
+
 /// Every repository the topic searches return, deduplicated, at most
 /// `limit` (0 for no limit beyond GitHub's own).
 pub async fn search(http: &Http, limit: usize) -> Vec<Repo> {
     let mut seen = HashSet::new();
     let mut repos = Vec::new();
-    for query in QUERIES {
+    for topic in OPT_IN_TOPICS {
         for sort in ["updated", "stars"] {
             let mut page = 1;
             loop {
@@ -99,7 +279,7 @@ pub async fn search(http: &Http, limit: usize) -> Vec<Repo> {
                     return repos;
                 }
                 let url = format!(
-                    "https://api.github.com/search/repositories?q={query}&sort={sort}&per_page=100&page={page}"
+                    "https://api.github.com/search/repositories?q=topic:{topic}&sort={sort}&per_page=100&page={page}"
                 );
                 let Some(found) = http.get_json::<SearchPage>(&url).await else {
                     break;
@@ -165,6 +345,14 @@ pub async fn classify(http: &Http, repo: &Repo, today: NaiveDate) -> Classified 
             repo.full_name, repo.default_branch
         )
     };
+    let listing = if has(MANIFEST) {
+        manifest(http, &repo.full_name, &repo.default_branch).await
+    } else {
+        None
+    };
+    if listing.as_ref().is_some_and(|m| !m.listed) {
+        return Classified::Skip;
+    }
     let readme_text = match paths
         .iter()
         .find(|p| p.eq_ignore_ascii_case("README.md") || p.eq_ignore_ascii_case("README"))
@@ -174,6 +362,7 @@ pub async fn classify(http: &Http, repo: &Repo, today: NaiveDate) -> Classified 
             .await
             .map(|text| readme::excerpt(&text))
             .unwrap_or_default(),
+        None if listing.is_some() => String::new(),
         None => return Classified::Skip,
     };
 
@@ -269,6 +458,9 @@ pub async fn classify(http: &Http, repo: &Repo, today: NaiveDate) -> Classified 
             command: format!("omarchy plugin add {}.git --enable", repo.html_url),
             note: "Not listed on plugins.omarchy.org; found by its manifest on GitHub.".into(),
         });
+        if let Some(listing) = &listing {
+            listing.apply(&mut entry);
+        }
         return Classified::Plugin(entry);
     }
 
@@ -293,7 +485,7 @@ pub async fn classify(http: &Http, repo: &Repo, today: NaiveDate) -> Classified 
                     | "src"
             )
     });
-    if !looks_like_software {
+    if !looks_like_software && listing.is_none() {
         return Classified::Skip;
     }
     entry.category = "Apps".into();
@@ -319,6 +511,9 @@ pub async fn classify(http: &Http, repo: &Repo, today: NaiveDate) -> Classified 
             note: "See the README for how to install.".into(),
         }
     });
+    if let Some(listing) = &listing {
+        listing.apply(&mut entry);
+    }
     Classified::App(entry)
 }
 
@@ -362,5 +557,92 @@ mod tests {
             &repo("a/omarchy-rose-theme", Some("MIT"), 1),
             now
         ));
+    }
+
+    fn app() -> Entry {
+        Entry {
+            id: "gh:a/tool".into(),
+            kind: Kind::App,
+            subkind: "source".into(),
+            name: "tool".into(),
+            summary: "A thing".into(),
+            description: String::new(),
+            author: "a".into(),
+            author_key: "a".into(),
+            repo: "https://github.com/a/tool".into(),
+            homepage: String::new(),
+            listing_url: String::new(),
+            license: "MIT".into(),
+            stars: 0,
+            category: "Apps".into(),
+            tags: vec!["rust".into()],
+            version: String::new(),
+            install: Some(Install {
+                method: InstallMethod::Manual,
+                command: String::new(),
+                note: "See the README for how to install.".into(),
+            }),
+            previews: Vec::new(),
+            thumbnail: "https://opengraph.githubusercontent.com/1/a/tool".into(),
+            first_seen: Utc::now().date_naive(),
+            upstream_added: None,
+            updated_at: None,
+            wants_contributors: false,
+            source: "github".into(),
+            status: String::new(),
+            verified: false,
+        }
+    }
+
+    #[test]
+    fn an_empty_manifest_opts_in_and_changes_nothing() {
+        let manifest = OscoveryToml::parse("", "a/tool");
+        assert!(manifest.listed);
+        let mut entry = app();
+        manifest.apply(&mut entry);
+        assert_eq!(entry, app());
+    }
+
+    #[test]
+    fn a_manifest_can_opt_out_and_a_broken_one_does() {
+        assert!(!OscoveryToml::parse("listed = false", "a/tool").listed);
+        assert!(!OscoveryToml::parse("listed = \"yes", "a/tool").listed);
+    }
+
+    #[test]
+    fn a_manifest_corrects_the_guesses() {
+        let manifest = OscoveryToml::parse(
+            r#"
+            summary = "Better words"
+            category = "Media"
+            tags = ["Audio", "rust"]
+            wants_contributors = true
+            previews = ["http://insecure.png", "https://example.com/shot.png"]
+            install = "github-release"
+            install_note = "Grab the tarball."
+            some_future_field = 1
+            "#,
+            "a/tool",
+        );
+        let mut entry = app();
+        manifest.apply(&mut entry);
+        assert_eq!(entry.summary, "Better words");
+        assert_eq!(entry.category, "Media");
+        assert_eq!(entry.tags, ["rust", "audio"]);
+        assert!(entry.wants_contributors);
+        assert_eq!(entry.previews, ["https://example.com/shot.png"]);
+        assert_eq!(entry.thumbnail, "https://example.com/shot.png");
+        let install = entry.install.unwrap();
+        assert_eq!(install.method, InstallMethod::GithubRelease);
+        assert_eq!(install.note, "Grab the tarball.");
+        assert_eq!(entry.subkind, "github-release");
+    }
+
+    #[test]
+    fn a_manifest_cannot_pick_a_method_that_runs_something_else() {
+        let manifest = OscoveryToml::parse(r#"install = "omarchy-plugin""#, "a/tool");
+        let mut entry = app();
+        manifest.apply(&mut entry);
+        assert_eq!(entry.install, app().install);
     }
 }

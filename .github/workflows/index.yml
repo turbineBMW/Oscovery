@@ -15,6 +15,7 @@ on:
     paths:
       - "crates/oscovery-index/**"
       - "crates/oscovery-core/**"
+      - "sources/**"
       - ".github/workflows/index.yml"
 
 permissions:
@@ -29,6 +30,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The crawl waits out GitHub's hourly limit rather than skip projects;
+    # a run normally takes minutes.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -41,6 +45,10 @@ jobs:
           url="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/first_seen.json"
           curl -fsSL "$url" -o state/first_seen.json || echo "no previous state at $url (first build)"
       - name: Build the index
+        env:
+          # Code search needs a token, and it lifts the API limit from 60
+          # requests an hour to 1,000.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo run --release -p oscovery-index -- build --out site --state state
       - name: Compress for the CDN
         run: gzip -9 -k site/index.json

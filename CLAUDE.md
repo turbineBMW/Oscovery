@@ -58,10 +58,15 @@ crates/oscovery-index/     the crawler, run by .github/workflows/index.yml daily
                [--github-limit n] [--no-aur] [--token t]`; Http (token, 403/429 backoff);
                merge order marketplace > github > aur (AUR folds onto a GitHub app with the
                same repo); first_seen.json (the Timeline's axis; seeded from each source's
-               own date on a fresh state; published with the site so Actions can fetch it)
+               own date on a fresh state; published with the site so Actions can fetch it);
+               consent: a submission needs submitted_by == owner or the repo's own
+               opt-in; then opt-outs (manifests of marketplace/AUR repos, sources/removed.txt)
   marketplace.rs  plugins.omarchy.org/catalog.json -> Entry (install command, previews)
-  github.rs    topics omarchy/omarchy-plugin/omarchy-app, quality floor (passes_floor: not
-               archived/fork, described, SPDX license, pushed < 18 months, no themes/dotfiles),
+  github.rs    opt-in only: oscovery.toml (code search; OscoveryToml corrects fields,
+               `listed = false` opts out of every source) or topics omarchy-plugin/
+               omarchy-app; never the broad omarchy topic. Topic repos pass a quality
+               floor (passes_floor: not archived/fork, described, SPDX license, pushed
+               < 18 months, no themes/dotfiles),
                classify by root tree: manifest.json with a real kind -> plugin, else app
                (install.sh -> install-script, omastore.toml -> github-release, else manual)
   aur.rs       rpc/v5 search "omarchy"; -bin/-git variants fold onto the base name

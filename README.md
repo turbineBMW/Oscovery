@@ -3,9 +3,9 @@
 Find Omarchy apps and plugins by describing them.
 
 Oscovery is a native GTK 4 / libadwaita app for [Omarchy](https://omarchy.org). It keeps a
-local catalog of every known Omarchy plugin and app (seeded from
-[plugins.omarchy.org](https://plugins.omarchy.org), with GitHub and the AUR to follow) and
-lets you find things three ways:
+local catalog of Omarchy plugins and apps whose authors put them out to be found
+([plugins.omarchy.org](https://plugins.omarchy.org), GitHub projects that opted in, and the
+AUR) and lets you find things three ways:
 
 - **Discover** — type what you want ("a bar widget that shows my 3D printer's progress")
   and the coding agent you already have (Claude Code, Codex, opencode, pi) searches the
@@ -29,6 +29,42 @@ There is no server. A public repository builds one `index.json` daily in GitHub 
 (`crates/oscovery-index`) and publishes it on GitHub Pages; the app fetches it with an ETag
 and searches it locally with SQLite FTS5. The "semantic" part is your own agent, on your own
 account.
+
+## For project authors
+
+Oscovery only lists projects that were published to be found: plugins on
+plugins.omarchy.org, AUR packages, and GitHub repositories that opted in. It does not crawl
+the broad `omarchy` topic, where plenty of repositories are someone's own setup.
+
+**To be listed**, add an `oscovery.toml` at the root of your default branch. An empty file
+is enough. Tagging the repository `omarchy-plugin` or `omarchy-app` also works, if it passes
+a basic quality floor (a description, a license, a push in the last 18 months). Every field
+is optional and corrects what Oscovery would otherwise guess:
+
+```toml
+summary = "One sentence on what it does"
+category = "Media"
+tags = ["audio", "waybar"]
+wants_contributors = true                 # shows "Wants contributors" on its page
+previews = ["https://.../screenshot.png"] # https only; the first is the card image
+install = "install-script"                # or "github-release", "manual" (apps only)
+install_note = "Needs Omarchy 3.2 or later."
+```
+
+Oscovery never takes a command from this file. The app builds the install command
+from the method and shows it to the user before anything runs.
+
+**To be left out**, whichever source found you (including the marketplace and the AUR):
+
+```toml
+listed = false
+```
+
+The next daily build drops it. Without a GitHub repository, or for everything you publish,
+use the [Remove my project](https://github.com/turbineBMW/Oscovery/issues/new?template=remove-project.yml)
+form. Code search can take a while to notice a new `oscovery.toml`; the
+[Submit a project](https://github.com/turbineBMW/Oscovery/issues/new?template=submit-project.yml)
+form gets you in sooner.
 
 ## Running
 

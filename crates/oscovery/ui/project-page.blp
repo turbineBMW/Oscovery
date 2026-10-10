@@ -210,6 +210,15 @@ template $OscoveryProjectPage: Adw.NavigationPage {
             styles ["dim-label", "caption"]
           }
 
+          Gtk.Label {
+            label: _("Your project? <a href=\"https://github.com/turbineBMW/Oscovery#for-project-authors\">Change or remove this listing</a>");
+            use-markup: true;
+            xalign: 0;
+            wrap: true;
+
+            styles ["dim-label", "caption"]
+          }
+
           Gtk.Box more_group {
             orientation: vertical;
             spacing: 8;

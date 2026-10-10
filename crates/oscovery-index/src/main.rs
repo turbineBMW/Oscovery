@@ -1,5 +1,7 @@
 //! `oscovery-index build`: the catalog index, from the Omarchy plugin
-//! marketplace, GitHub's `omarchy*` topics and the AUR. Runs daily in
+//! marketplace, GitHub repositories that opted in (an `oscovery.toml`, or
+//! the `omarchy-plugin` / `omarchy-app` topic) and the AUR. Any of them can
+//! opt out with `listed = false`, or be named in `sources/removed.txt`. Runs daily in
 //! GitHub Actions and writes a static site: `index.json` (the whole
 //! catalog), `timeline.json` (day -> ids), `manifest.json` (counts, hash)
 //! and `first_seen.json` (the state, published so the next stateless build
@@ -19,7 +21,7 @@ use chrono::{NaiveDate, Utc};
 use oscovery_core::models::{Entry, Index, Kind};
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -83,10 +85,14 @@ fn parse_args() -> Args {
     args
 }
 
-/// A submitted project: `sources/<name>.toml`.
+/// A submitted project: `sources/<name>.toml`. Listed when the person who
+/// submitted it owns the repository, or the repository opted in itself.
 #[derive(Default, serde::Deserialize)]
 struct Submission {
     repo: String,
+    /// The GitHub login that asked for it (the issue's author).
+    #[serde(default)]
+    submitted_by: String,
     #[serde(default)]
     wants_contributors: bool,
     #[serde(default)]
@@ -147,14 +153,27 @@ impl Http {
             match request.send().await {
                 Ok(response) if response.status().is_success() => return Some(response),
                 Ok(response) if response.status() == 403 || response.status() == 429 => {
-                    let wait = response
-                        .headers()
-                        .get("retry-after")
-                        .and_then(|v| v.to_str().ok())
-                        .and_then(|v| v.parse::<u64>().ok())
-                        .unwrap_or(30 * (attempt + 1));
+                    let header = |name: &str| {
+                        response
+                            .headers()
+                            .get(name)
+                            .and_then(|v| v.to_str().ok())
+                            .and_then(|v| v.parse::<u64>().ok())
+                    };
+                    // The hourly allowance is spent: wait for it to come back
+                    // rather than give up on the request.
+                    let wait = if header("x-ratelimit-remaining") == Some(0)
+                        && let Some(reset) = header("x-ratelimit-reset")
+                    {
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_or(0, |d| d.as_secs());
+                        reset.saturating_sub(now).saturating_add(2).min(3700)
+                    } else {
+                        header("retry-after").unwrap_or(30 * (attempt + 1)).min(120)
+                    };
                     eprintln!("rate limited on {url}; waiting {wait}s");
-                    tokio::time::sleep(Duration::from_secs(wait.min(120))).await;
+                    tokio::time::sleep(Duration::from_secs(wait)).await;
                 }
                 Ok(response) => {
                     if response.status() != 404 {
@@ -233,17 +252,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter_map(|(i, e)| repo_key(&e.repo).map(|k| (k, i)))
         .collect();
 
-    // 2. GitHub: plugins the marketplace missed, and apps.
+    // 2. GitHub: plugins the marketplace missed, and apps, from repositories
+    // that opted in. One with an `oscovery.toml` asked to be listed, so only
+    // the topic ones have to pass the quality floor.
     if args.github {
-        let repos = github::search(&http, args.github_limit).await;
-        eprintln!("github: {} repositories under the topics", repos.len());
+        let opted_in = github::opted_in(&http).await;
+        eprintln!(
+            "github: {} repositories with an {}",
+            opted_in.len(),
+            github::MANIFEST
+        );
+        let opted: HashSet<String> = opted_in
+            .iter()
+            .map(|repo| repo.full_name.to_lowercase())
+            .collect();
+        let tagged = github::search(&http, args.github_limit).await;
+        eprintln!("github: {} repositories under the topics", tagged.len());
         let now = Utc::now();
-        let candidates: Vec<_> = repos
+        let candidates: Vec<_> = opted_in
             .into_iter()
-            .filter(|repo| github::passes_floor(repo, now))
+            .filter(|repo| !repo.archived)
+            .chain(tagged.into_iter().filter(|repo| {
+                !opted.contains(&repo.full_name.to_lowercase()) && github::passes_floor(repo, now)
+            }))
             .filter(|repo| !known_repos.contains_key(&repo.full_name.to_lowercase()))
             .collect();
-        eprintln!("github: {} pass the floor and are new", candidates.len());
+        eprintln!("github: {} to classify", candidates.len());
         let semaphore = Arc::new(tokio::sync::Semaphore::new(6));
         let mut tasks = tokio::task::JoinSet::new();
         for repo in candidates {
@@ -301,6 +335,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if repo.archived {
                 continue;
             }
+            let consented = submission
+                .submitted_by
+                .eq_ignore_ascii_case(&repo.owner.login)
+                || repo
+                    .topics
+                    .iter()
+                    .any(|t| github::OPT_IN_TOPICS.contains(&t.as_str()))
+                || github::manifest(&http, &repo.full_name, &repo.default_branch)
+                    .await
+                    .is_some();
+            if !consented {
+                eprintln!(
+                    "submission {slug}: submitted by {:?}, not the owner, and the repository \
+                     has no {} or opt-in topic; left out",
+                    submission.submitted_by,
+                    github::MANIFEST
+                );
+                continue;
+            }
             let entry = match github::classify(&http, &repo, today).await {
                 github::Classified::Plugin(entry) | github::Classified::App(entry) => entry,
                 github::Classified::Skip => {
@@ -354,6 +407,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             packages.len()
         );
     }
+
+    // 4. Opt-outs. The GitHub crawl read its repositories' manifests
+    // already; a marketplace or AUR project on GitHub can say
+    // `listed = false` (or ask for contributors) in one too. Then whatever
+    // sources/removed.txt names.
+    let unread: Vec<(usize, String)> = entries
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| e.source != "github" && e.source != "submitted")
+        .filter_map(|(i, e)| oscovery_core::models::github_slug(&e.repo).map(|slug| (i, slug)))
+        .collect();
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(8));
+    let mut tasks = tokio::task::JoinSet::new();
+    for (index, slug) in unread {
+        let http = http.clone();
+        let permit = semaphore.clone().acquire_owned().await?;
+        tasks.spawn(async move {
+            let manifest = github::manifest(&http, &slug, "HEAD").await;
+            drop(permit);
+            (index, manifest)
+        });
+    }
+    let mut unlisted = HashSet::new();
+    while let Some(result) = tasks.join_next().await {
+        if let (index, Some(manifest)) = result? {
+            if manifest.listed {
+                entries[index].wants_contributors |= manifest.wants_contributors;
+            } else {
+                unlisted.insert(entries[index].id.clone());
+            }
+        }
+    }
+    let removed = load_removed(&args.sources.join("removed.txt"));
+    let before = entries.len();
+    entries.retain(|e| !unlisted.contains(&e.id) && !is_removed(e, &removed));
+    eprintln!(
+        "opt-outs: {} by manifest, {} in all",
+        unlisted.len(),
+        before - entries.len()
+    );
 
     entries.sort_by(|a, b| a.id.cmp(&b.id));
     entries.dedup_by(|a, b| a.id == b.id);
@@ -431,4 +524,77 @@ fn load_first_seen(path: &Path) -> BTreeMap<String, NaiveDate> {
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default()
+}
+
+/// `sources/removed.txt`: one project per line, as a repository URL,
+/// `owner/repo`, `owner/*` (everything of theirs) or a catalog id
+/// (`aur:name`, a plugin id). `#` starts a comment.
+fn load_removed(path: &Path) -> Vec<String> {
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .map(|line| line.split('#').next().unwrap_or("").trim())
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            oscovery_core::models::github_slug(line)
+                .unwrap_or_else(|| line.to_string())
+                .to_lowercase()
+        })
+        .collect()
+}
+
+fn is_removed(entry: &Entry, removed: &[String]) -> bool {
+    let id = entry.id.to_lowercase();
+    let key = repo_key(&entry.repo);
+    let owner = key.as_deref().and_then(|k| k.split('/').next());
+    removed.iter().any(|line| {
+        *line == id
+            || Some(line.as_str()) == key.as_deref()
+            || line
+                .strip_suffix("/*")
+                .is_some_and(|wild| Some(wild) == owner)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn removed_matches_ids_repositories_and_owners() {
+        let dir = std::env::temp_dir().join(format!("oscovery-removed-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("removed.txt");
+        std::fs::write(
+            &path,
+            "# asked on #12\nhttps://github.com/Some/Tool.git\naur:thing  # theirs\nquiet/*\n\n",
+        )
+        .unwrap();
+        let removed = load_removed(&path);
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(removed, ["some/tool", "aur:thing", "quiet/*"]);
+
+        let entry = |id: &str, repo: &str| Entry {
+            id: id.into(),
+            repo: repo.into(),
+            ..serde_json::from_value(serde_json::json!({
+                "id": "", "kind": "app", "name": "", "first_seen": "2026-01-01"
+            }))
+            .unwrap()
+        };
+        assert!(is_removed(
+            &entry("gh:some/tool", "https://github.com/some/tool"),
+            &removed
+        ));
+        assert!(is_removed(&entry("aur:thing", ""), &removed));
+        assert!(is_removed(
+            &entry("x.y.z", "https://github.com/Quiet/plugin"),
+            &removed
+        ));
+        assert!(!is_removed(
+            &entry("gh:some/tool2", "https://github.com/some/tool2"),
+            &removed
+        ));
+        assert!(!is_removed(&entry("aur:thing-bin", ""), &removed));
+    }
 }

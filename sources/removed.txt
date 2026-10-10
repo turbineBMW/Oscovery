@@ -1,0 +1,3 @@
+# Projects kept out of the catalog at their author's request. One per line:
+# a repository URL, owner/repo, owner/* (everything of theirs), or a catalog
+# id (aur:name, a plugin id). Add the issue number as a comment.

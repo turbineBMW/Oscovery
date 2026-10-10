@@ -1,0 +1,39 @@
+name: Remove my project
+description: Keep your project out of the Oscovery catalog
+title: "Remove: "
+labels: [removal]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sorry it showed up when you didn't want it to. For a project on GitHub the
+        quickest way out is a file named `oscovery.toml` at the root of the default
+        branch containing:
+
+        ```toml
+        listed = false
+        ```
+
+        The next daily build drops it, whichever source found it, and it stays out.
+        Otherwise tell us here and it goes into `sources/removed.txt`; the index
+        rebuilds as soon as that changes.
+  - type: input
+    id: project
+    attributes:
+      label: Project
+      description: The repository URL, the AUR package name, or the plugin id. For everything you publish, write `owner/*`.
+      placeholder: https://github.com/owner/name
+    validations:
+      required: true
+  - type: checkboxes
+    id: owner
+    attributes:
+      label: Ownership
+      options:
+        - label: I maintain this project (or speak for the people who do)
+          required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Optional. Anything we should know, or did differently that made this a problem.
