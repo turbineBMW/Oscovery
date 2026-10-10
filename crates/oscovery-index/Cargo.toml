@@ -15,7 +15,7 @@ oscovery-core = { path = "../oscovery-core" }
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["sync"] }
 reqwest.workspace = true
 sha2 = "0.10"
 hex = "0.4"

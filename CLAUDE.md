@@ -53,10 +53,19 @@ crates/oscovery-core/src/  no widgets; everything here is unit-tested (`cargo te
                terminal | manual), enable/disable/remove, run, installed_plugins (--json)
   review.rs    security review: source_url, shallow clone, prompt, parse (verdict + findings)
   omarchy.rs   Omarchy colors.toml -> libadwaita CSS variables (ported from Skali/Rustle)
-crates/oscovery-index/     the crawler: `oscovery-index build --out site` reads the
-                           marketplace catalog.json, keeps state/first_seen.json (the
-                           Timeline's axis; seeded from addedAt on a fresh state), writes
-                           index.json, timeline.json, manifest.json. Runs in GitHub Actions.
+crates/oscovery-index/     the crawler, run by .github/workflows/index.yml daily onto Pages:
+  main.rs      `build --out site [--state d] [--marketplace src] [--no-github]
+               [--github-limit n] [--no-aur] [--token t]`; Http (token, 403/429 backoff);
+               merge order marketplace > github > aur (AUR folds onto a GitHub app with the
+               same repo); first_seen.json (the Timeline's axis; seeded from each source's
+               own date on a fresh state; published with the site so Actions can fetch it)
+  marketplace.rs  plugins.omarchy.org/catalog.json -> Entry (install command, previews)
+  github.rs    topics omarchy/omarchy-plugin/omarchy-app, quality floor (passes_floor: not
+               archived/fork, described, SPDX license, pushed < 18 months, no themes/dotfiles),
+               classify by root tree: manifest.json with a real kind -> plugin, else app
+               (install.sh -> install-script, omastore.toml -> github-release, else manual)
+  aur.rs       rpc/v5 search "omarchy"; -bin/-git variants fold onto the base name
+  readme.rs    README excerpt (no badges, HTML, headings, code; ~1500 chars)
 crates/oscovery/src/       the GTK layer
   main.rs      logging, gettext, `import`, run;  application.rs  db + settings, actions,
                refresh_index (fetch -> replace_entries -> window.catalog_changed)
