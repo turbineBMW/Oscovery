@@ -3,12 +3,14 @@
 
 use super::OscoveryWindow;
 use crate::i18n::{format, gettext};
+use crate::rt;
 use crate::widgets::entry_card::kind_label;
 use crate::{images, widgets};
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::glib;
 use oscovery_core::db::Query;
+use oscovery_core::install::{self, Action};
 use oscovery_core::models::{Entry, InstallMethod};
 use oscovery_core::retrieve::fts_any;
 use std::cell::RefCell;
@@ -40,6 +42,16 @@ mod imp {
         pub repo_button: TemplateChild<gtk::Button>,
         #[template_child]
         pub listing_button: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub manage_box: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub installed_chip: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub enable_button: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub disable_button: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub remove_button: TemplateChild<gtk::Button>,
         #[template_child]
         pub install_command: TemplateChild<gtk::Label>,
         #[template_child]
@@ -104,6 +116,132 @@ impl ProjectPage {
         NavigationPageExt::set_title(&page, &entry.name);
         page.fill(window, entry);
         page
+    }
+
+    /// Ask, showing the exact command, then run it and report.
+    fn confirm_and_run(&self, action: &Action, verb: &str) {
+        let imp = self.imp();
+        let Some(window) = imp.window.upgrade() else {
+            return;
+        };
+        let name = imp.name_label.text().to_string();
+        let dialog = adw::AlertDialog::builder()
+            .heading(format(
+                &gettext("{verb} {name}?"),
+                &[("verb", verb), ("name", &name)],
+            ))
+            .body(action.display())
+            .build();
+        dialog.add_responses(&[("cancel", &gettext("Cancel")), ("go", verb)]);
+        dialog.set_response_appearance(
+            "go",
+            if verb == gettext("Remove") {
+                adw::ResponseAppearance::Destructive
+            } else {
+                adw::ResponseAppearance::Suggested
+            },
+        );
+        dialog.set_default_response(Some("go"));
+        let action = action.clone();
+        dialog.connect_response(
+            None,
+            glib::clone!(
+                #[weak(rename_to = page)]
+                self,
+                #[weak]
+                window,
+                move |_, response| {
+                    if response != "go" {
+                        return;
+                    }
+                    let imp = page.imp();
+                    for button in [
+                        &*imp.install_button,
+                        &*imp.enable_button,
+                        &*imp.disable_button,
+                        &*imp.remove_button,
+                    ] {
+                        button.set_sensitive(false);
+                    }
+                    let action = action.clone();
+                    let shown = action.display();
+                    rt::run(
+                        async move { install::run(&action).await },
+                        glib::clone!(
+                            #[weak]
+                            page,
+                            #[weak]
+                            window,
+                            move |result| {
+                                page.imp().install_button.set_sensitive(true);
+                                match result {
+                                    Ok(outcome) if outcome.success => {
+                                        tracing::info!("ran: {shown}");
+                                        window.toast(&gettext("Done."));
+                                    }
+                                    Ok(outcome) => {
+                                        tracing::warn!(
+                                            "failed: {shown}\n{}\n{}",
+                                            outcome.stdout,
+                                            outcome.stderr
+                                        );
+                                        window.toast(&outcome.complaint());
+                                    }
+                                    Err(error) => {
+                                        tracing::warn!("failed: {shown}: {error}");
+                                        window.toast(&error.to_string());
+                                    }
+                                }
+                                page.refresh_installed();
+                            }
+                        ),
+                    );
+                }
+            ),
+        );
+        dialog.present(Some(&window));
+    }
+
+    /// Read back whether this plugin is installed and enabled, and show
+    /// the right buttons.
+    fn refresh_installed(&self) {
+        let imp = self.imp();
+        let Some(entry) = imp.entry.borrow().clone() else {
+            return;
+        };
+        if !entry.is_plugin() {
+            return;
+        }
+        let id = entry.id.clone();
+        rt::run(
+            async move { install::installed_plugins().await.remove(&id) },
+            glib::clone!(
+                #[weak(rename_to = page)]
+                self,
+                move |installed| {
+                    let imp = page.imp();
+                    let Some(plugin) = installed else {
+                        imp.manage_box.set_visible(false);
+                        imp.install_button.set_visible(entry.install.is_some());
+                        return;
+                    };
+                    imp.manage_box.set_visible(true);
+                    imp.install_button.set_visible(false);
+                    imp.installed_chip.set_text(&if plugin.enabled {
+                        gettext("Installed and enabled")
+                    } else {
+                        gettext("Installed, not enabled")
+                    });
+                    imp.enable_button.set_visible(!plugin.enabled);
+                    imp.enable_button.set_sensitive(true);
+                    imp.disable_button
+                        .set_visible(plugin.enabled && plugin.can_disable);
+                    imp.disable_button.set_sensitive(true);
+                    imp.remove_button.set_visible(!plugin.first_party);
+                    imp.remove_button.set_sensitive(true);
+                }
+            ),
+        );
     }
 
     fn fill(&self, window: &OscoveryWindow, entry: &Entry) {
@@ -171,42 +309,64 @@ impl ProjectPage {
         }
         imp.meta_label.set_text(&meta.join(" · "));
 
-        // Install: the command is shown before it ever runs. Running it is
-        // the next phase; until then the button explains itself.
-        match &entry.install {
-            Some(install) if !install.command.is_empty() => {
-                imp.install_command.set_text(&install.command);
-                imp.install_command.set_visible(true);
-                imp.install_button.set_sensitive(false);
-                imp.install_button.set_tooltip_text(Some(&gettext(
-                    "Installing from here is coming next; the command above works today.",
-                )));
-                if install.method == InstallMethod::OmarchyBuiltin {
-                    imp.install_button.set_label(&gettext("Enable"));
-                }
-            }
-            Some(install) => {
+        // Install: the command is shown before it ever runs, and again in
+        // the confirmation.
+        let action = install::install_action(entry);
+        match (&action, &entry.install) {
+            (Action::Manual, Some(install)) => {
                 imp.install_button.set_sensitive(false);
                 imp.install_button
                     .set_tooltip_text(Some(&gettext("No one-step install; see the repository.")));
-                imp.install_note.set_text(&install.note);
+                if !install.note.is_empty() {
+                    imp.install_note.set_text(&install.note);
+                    imp.install_note.set_visible(true);
+                }
             }
-            None => {
-                imp.install_button.set_sensitive(false);
-                imp.install_button.set_visible(false);
+            (Action::Manual, None) => imp.install_button.set_visible(false),
+            (action, install) => {
+                imp.install_command.set_text(&action.display());
+                imp.install_command.set_visible(true);
+                if let Some(install) = install
+                    && install.method == InstallMethod::OmarchyBuiltin
+                {
+                    imp.install_button.set_label(&gettext("Enable"));
+                }
+                if matches!(action, Action::Terminal { .. }) {
+                    imp.install_note.set_text(&gettext(
+                        "Runs in a terminal, where you can watch and answer prompts.",
+                    ));
+                    imp.install_note.set_visible(true);
+                }
+                let action = action.clone();
+                imp.install_button.connect_clicked(glib::clone!(
+                    #[weak(rename_to = page)]
+                    self,
+                    move |_| page.confirm_and_run(&action, &gettext("Install"))
+                ));
             }
         }
-        if let Some(install) = &entry.install
-            && !install.note.is_empty()
-            && install.method != InstallMethod::OmarchyPlugin
-        {
-            imp.install_note.set_text(&install.note);
-            imp.install_note.set_visible(true);
+        for (button, action) in [
+            (&imp.enable_button, install::enable_action(&entry.id)),
+            (&imp.disable_button, install::disable_action(&entry.id)),
+            (&imp.remove_button, install::remove_action(&entry.id)),
+        ] {
+            let label = button.label().unwrap_or_default().to_string();
+            button.connect_clicked(glib::clone!(
+                #[weak(rename_to = page)]
+                self,
+                move |_| page.confirm_and_run(&action, &label)
+            ));
         }
-        imp.review_button.set_sensitive(false);
-        imp.review_button.set_tooltip_text(Some(&gettext(
-            "Your coding agent reads the source and reports before anything installs. Coming next.",
-        )));
+        self.refresh_installed();
+        let reviewable =
+            oscovery_core::review::source_url(entry).is_some() && !matches!(action, Action::Manual);
+        imp.review_button.set_visible(reviewable);
+        let for_review = entry.clone();
+        imp.review_button.connect_clicked(glib::clone!(
+            #[weak]
+            window,
+            move |_| window.open_review(&for_review)
+        ));
 
         let repo = entry.repo.clone();
         imp.repo_button.set_visible(!repo.is_empty());

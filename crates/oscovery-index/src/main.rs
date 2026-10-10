@@ -132,10 +132,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.out.join("manifest.json"),
         serde_json::to_vec_pretty(&manifest)?,
     )?;
-    std::fs::write(
-        args.state.join("first_seen.json"),
-        serde_json::to_vec_pretty(&first_seen)?,
-    )?;
+    // The state goes out with the site too, so a stateless build (GitHub
+    // Actions) can fetch yesterday's from the published site.
+    let first_seen_json = serde_json::to_vec_pretty(&first_seen)?;
+    std::fs::write(args.state.join("first_seen.json"), &first_seen_json)?;
+    std::fs::write(args.out.join("first_seen.json"), &first_seen_json)?;
     eprintln!(
         "wrote {} entries ({} plugins) to {}",
         index.entries.len(),

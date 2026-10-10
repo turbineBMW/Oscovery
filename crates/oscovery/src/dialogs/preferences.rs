@@ -28,6 +28,8 @@ mod imp {
         #[template_child]
         pub model_row: TemplateChild<adw::EntryRow>,
         #[template_child]
+        pub projects_dir_row: TemplateChild<adw::EntryRow>,
+        #[template_child]
         pub index_url_row: TemplateChild<adw::EntryRow>,
         #[template_child]
         pub refresh_row: TemplateChild<adw::ActionRow>,
@@ -100,6 +102,13 @@ impl PreferencesDialog {
             }
         ));
         settings.bind(keys::MODEL, &*imp.model_row, "text").build();
+        settings
+            .bind(keys::PROJECTS_DIR, &*imp.projects_dir_row, "text")
+            .build();
+        if settings.string(keys::PROJECTS_DIR).is_empty() {
+            imp.projects_dir_row
+                .set_text(&glib::home_dir().join("Projects").display().to_string());
+        }
         settings
             .bind(keys::INDEX_URL, &*imp.index_url_row, "text")
             .build();

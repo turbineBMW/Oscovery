@@ -5,6 +5,7 @@ mod author;
 mod browse;
 mod discover;
 mod project;
+mod review;
 mod timeline;
 
 use crate::application::OscoveryApplication;
@@ -207,8 +208,10 @@ impl OscoveryWindow {
             _ => gettext("Browse"),
         });
         imp.split.set_show_content(true);
-        if section == "timeline" {
-            imp.timeline_page.ensure_loaded();
+        match section {
+            "timeline" => imp.timeline_page.ensure_loaded(),
+            "discover" => imp.discover_page.focus_prompt(),
+            _ => {}
         }
     }
 
@@ -262,6 +265,12 @@ impl OscoveryWindow {
     pub fn open_entry(&self, entry: &Entry) {
         tracing::debug!("opening {}", entry.id);
         let page = ProjectPage::new(self, entry);
+        self.imp().content_nav.push(&page);
+    }
+
+    /// Push the security review of a project.
+    pub fn open_review(&self, entry: &Entry) {
+        let page = review::page(self, entry);
         self.imp().content_nav.push(&page);
     }
 

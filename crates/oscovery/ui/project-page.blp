@@ -122,6 +122,38 @@ template $OscoveryProjectPage: Adw.NavigationPage {
             }
           }
 
+          Gtk.Box manage_box {
+            spacing: 8;
+            visible: false;
+
+            Gtk.Label installed_chip {
+              valign: center;
+
+              styles ["chip", "verified"]
+            }
+
+            Gtk.Button enable_button {
+              label: _("Enable");
+              visible: false;
+
+              styles ["pill"]
+            }
+
+            Gtk.Button disable_button {
+              label: _("Disable");
+              visible: false;
+
+              styles ["pill"]
+            }
+
+            Gtk.Button remove_button {
+              label: _("Remove");
+              visible: false;
+
+              styles ["pill", "destructive-action"]
+            }
+          }
+
           Gtk.Label install_command {
             xalign: 0;
             wrap: true;

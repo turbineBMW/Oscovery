@@ -207,6 +207,11 @@ Harness output streams through an `async_channel` into the chat view.
 
 ## 9. Phases
 
+Status 2026-10-10 (evening): 1, 2, 3, 4 and 5 are implemented and committed; 6 is
+the workflow in `.github/workflows/index.yml` (needs GitHub Pages switched to
+"GitHub Actions" once, in the repository settings) with the marketplace as the
+only crawl so far; GitHub topics, AUR and submissions are next. 7 is open.
+
 1. **Foundation** (this session): workspace, theme following, settings, DB +
    FTS, index fetch from a local file, Browse with search and cards, Project
    page with upstream links. Index builder that converts catalog.json → our

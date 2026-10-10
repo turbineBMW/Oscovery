@@ -1,6 +1,7 @@
 //! Oscovery: find Omarchy apps and plugins by describing them.
 
 mod accent;
+mod agent;
 mod application;
 mod config;
 mod dialogs;
@@ -22,6 +23,16 @@ fn main() -> glib::ExitCode {
     // `oscovery import <index.json>`: load a local index build into the
     // catalog, for development and for an offline machine.
     let args: Vec<String> = std::env::args().collect();
+    // `oscovery ask "<question>"`: one answer from the configured agent,
+    // printed; for trying prompts without the window.
+    if args.get(1).map(String::as_str) == Some("ask") {
+        let question = args[2..].join(" ");
+        if question.trim().is_empty() {
+            eprintln!("usage: oscovery ask <question>");
+            return glib::ExitCode::FAILURE;
+        }
+        return ask(&question);
+    }
     if args.get(1).map(String::as_str) == Some("import") {
         let Some(path) = args.get(2) else {
             eprintln!("usage: oscovery import <index.json>");
@@ -69,6 +80,47 @@ fn init_logging() {
         .with(file_layer)
         .init();
     tracing::info!("oscovery {} starting", config::VERSION);
+}
+
+fn ask(question: &str) -> glib::ExitCode {
+    let settings = settings::load();
+    let (Some(harness), model) = agent::configured(&settings) else {
+        eprintln!("no coding agent found (claude, codex, opencode or pi)");
+        return glib::ExitCode::FAILURE;
+    };
+    let db = match application::open_database() {
+        Ok(db) => db,
+        Err(error) => {
+            eprintln!("{error}");
+            return glib::ExitCode::FAILURE;
+        }
+    };
+    let shortlist = oscovery_core::workdir::shortlist(&agent::shortlist(&db, question));
+    let job = agent::Job {
+        harness,
+        model,
+        prompt: oscovery_core::harness::search_prompt(&shortlist, &[], question),
+        catalog: agent::entries_for_workdir(&db),
+    };
+    eprintln!("asking {}…", harness.label());
+    match rt::handle().block_on(agent::run(job)) {
+        Ok(raw) => {
+            let answer = oscovery_core::harness::parse_answer(&raw);
+            println!("{}", answer.text);
+            if !answer.matches.is_empty() {
+                println!();
+                for m in &answer.matches {
+                    println!("  {}  {}", m.id, m.why);
+                }
+            }
+            println!("\noffer: {:?}", answer.offer);
+            glib::ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            glib::ExitCode::FAILURE
+        }
+    }
 }
 
 fn import(path: &std::path::Path) -> glib::ExitCode {

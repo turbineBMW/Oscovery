@@ -29,7 +29,9 @@ WebP needs no pixbuf loader). Edition 2024, MSRV 1.88.
 Dev hooks: `OSCOVERY_INDEX=<path or URL>` overrides the index source (a checkout's
 `site/index.json` after `just index`); `oscovery import <index.json>` loads one into the
 catalog without the GUI; `OSCOVERY_DEBUG_SECTION=discover|browse|timeline` and
-`OSCOVERY_DEBUG_OPEN=<entry id>` open there at launch. For a screenshot on Hyprland:
+`OSCOVERY_DEBUG_OPEN=<entry id>` open there at launch; `oscovery ask "<question>"` runs one
+Discover question headlessly and prints the parsed answer (the best way to iterate on
+`harness::INSTRUCTIONS`). Note `env -u CLAUDECODE` when testing from inside Claude Code. For a screenshot on Hyprland:
 `hyprctl clients -j` for the window geometry (class `io.github.turbinebmw.Oscovery`), `grim -g`.
 
 ## Layout
@@ -42,6 +44,14 @@ crates/oscovery-core/src/  no widgets; everything here is unit-tested (`cargo te
                categories, timeline_days/entries_on. Append-only MIGRATIONS (user_version)
   index.rs     fetch index.json with an ETag (304 -> NotModified); file:// and paths too
   retrieve.rs  fts_match (every word required) / fts_any (a sentence: any word, no stop words)
+  harness.rs   Harness (claude|codex|opencode|pi): headless read-only invocation, blocking
+               `ask`, the INSTRUCTIONS, search_prompt (transcript re-sent whole), parse_answer
+               (prose + the ```oscovery JSON block), interactive_args + extend_prompt (hand-off)
+  workdir.rs   the catalog directory the agent greps: INDEX.md + catalog/<kind>/<id>.md,
+               rebuilt when the index stamp changes
+  install.rs   install_action (omarchy-plugin-add --yes | omarchy-plugin-enable | yay in a
+               terminal | manual), enable/disable/remove, run, installed_plugins (--json)
+  review.rs    security review: source_url, shallow clone, prompt, parse (verdict + findings)
   omarchy.rs   Omarchy colors.toml -> libadwaita CSS variables (ported from Skali/Rustle)
 crates/oscovery-index/     the crawler: `oscovery-index build --out site` reads the
                            marketplace catalog.json, keeps state/first_seen.json (the
@@ -51,10 +61,13 @@ crates/oscovery/src/       the GTK layer
   main.rs      logging, gettext, `import`, run;  application.rs  db + settings, actions,
                refresh_index (fetch -> replace_entries -> window.catalog_changed)
   rt.rs        the tokio runtime and `rt::run(job, on_done)` -- the threading model (below)
+  agent.rs     asking from GTK: configured harness, workdir stamp, shortlist, ask (job on
+               tokio, parsed answer + resolved entries back), clone_into + hand_off (terminal)
   window/      mod.rs (sidebar, sections, open_entry/open_author, debug hooks),
                browse.rs (search + filters, paged FlowBox), timeline.rs (days on scroll),
-               project.rs (ProjectPage: install, more by author, similar), author.rs,
-               discover.rs (the agent page)
+               project.rs (ProjectPage: install/enable/disable/remove with a confirm
+               showing the command, more by author, similar), author.rs, review.rs (the
+               review page), discover.rs (the conversation: bubbles, match cards, extend)
   widgets/     entry_card.rs (EntryCard template), mod.rs (chips, fill_cards, initials)
   images.rs    preview fetch -> ~/.cache/oscovery/images, decode off-thread -> MemoryTexture
   dialogs/     preferences.rs (agent, model, index URL, theme)

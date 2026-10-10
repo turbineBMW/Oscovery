@@ -2,7 +2,7 @@
 <schemalist gettext-domain="oscovery">
 	<schema id="io.github.turbinebmw.Oscovery" path="/io/github/turbinebmw/Oscovery/">
 		<key name="index-url" type="s">
-			<default>'https://turbinebmw.github.io/oscovery-index/index.json'</default>
+			<default>'https://turbinebmw.github.io/Oscovery/index.json'</default>
 			<summary>Catalog index URL</summary>
 			<description>Where the catalog index is fetched from. A file:// URL or a plain path reads a local build.</description>
 		</key>

@@ -4,19 +4,107 @@ using Adw 1;
 template $OscoveryDiscoverPage: Gtk.Box {
   orientation: vertical;
 
-  Adw.StatusPage status_page {
-    icon-name: "system-search-symbolic";
-    title: _("Describe what you want");
-    description: _("Your coding agent will search the whole catalog and answer. This page is next in line; Browse and Timeline work today.");
+  Gtk.Stack stack {
     vexpand: true;
+    transition-type: crossfade;
 
-    child: Adw.Clamp {
-      maximum-size: 640;
+    StackPage {
+      name: "no-agent";
+      child: Adw.StatusPage {
+        icon-name: "system-search-symbolic";
+        title: _("No coding agent found");
+        description: _("Discover runs the agent you already use, on your own account: Claude Code, Codex, opencode or pi. Install one, or pick it in Preferences, and describe what you want here.");
 
-      Gtk.Entry prompt_entry {
-        placeholder-text: _("A bar widget that shows my 3D printer's progress…");
-        sensitive: false;
-      }
-    };
+        child: Gtk.Button {
+          label: _("Open Preferences");
+          action-name: "app.preferences";
+          halign: center;
+
+          styles ["pill"]
+        };
+      };
+    }
+
+    StackPage {
+      name: "chat";
+      child: Gtk.Box {
+        orientation: vertical;
+
+        Gtk.ScrolledWindow scroller {
+          vexpand: true;
+          hscrollbar-policy: never;
+
+          child: Adw.Clamp {
+            maximum-size: 1100;
+            tightening-threshold: 900;
+
+            child: Gtk.Box conversation {
+              orientation: vertical;
+              spacing: 18;
+              margin-start: 18;
+              margin-end: 18;
+              margin-top: 12;
+              margin-bottom: 18;
+
+              Adw.StatusPage intro {
+                icon-name: "system-search-symbolic";
+                title: _("Describe what you want");
+                description: _("“A bar widget that shows my 3D printer’s progress.” “Something to pick a window with the keyboard.” Your agent searches the whole catalog and answers; then ask it to narrow down.");
+                vexpand: true;
+              }
+            };
+          };
+        }
+
+        Gtk.Box {
+          orientation: vertical;
+          spacing: 6;
+          margin-start: 12;
+          margin-end: 12;
+          margin-top: 6;
+          margin-bottom: 8;
+
+          Gtk.Box {
+            spacing: 6;
+
+            Gtk.Entry prompt_entry {
+              hexpand: true;
+              placeholder-text: _("What are you looking for?");
+            }
+
+            Gtk.Button send_button {
+              icon-name: "mail-send-symbolic";
+              tooltip-text: _("Ask");
+
+              styles ["suggested-action"]
+            }
+
+            Gtk.Button reset_button {
+              icon-name: "edit-clear-all-symbolic";
+              tooltip-text: _("New conversation");
+              sensitive: false;
+
+              styles ["flat"]
+            }
+          }
+
+          Gtk.Box {
+            spacing: 8;
+
+            Adw.Spinner busy_spinner {
+              visible: false;
+            }
+
+            Gtk.Label status_label {
+              xalign: 0;
+              hexpand: true;
+              ellipsize: end;
+
+              styles ["dim-label", "caption"]
+            }
+          }
+        }
+      };
+    }
   }
 }

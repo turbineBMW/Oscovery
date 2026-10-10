@@ -1,0 +1,58 @@
+# Builds the catalog index daily and publishes it on GitHub Pages:
+#   https://<owner>.github.io/<repo>/index.json
+# The Timeline's first_seen memory lives on the site itself (first_seen.json),
+# fetched before each build, so nothing is committed back.
+#
+# One-time setup: Settings -> Pages -> Source: "GitHub Actions".
+name: index
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "crates/oscovery-index/**"
+      - "crates/oscovery-core/**"
+      - ".github/workflows/index.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - name: Fetch yesterday's first_seen memory from the live site
+        run: |
+          mkdir -p state
+          url="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/first_seen.json"
+          curl -fsSL "$url" -o state/first_seen.json || echo "no previous state at $url (first build)"
+      - name: Build the index
+        run: cargo run --release -p oscovery-index -- build --out site --state state
+      - name: Compress for the CDN
+        run: gzip -9 -k site/index.json
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

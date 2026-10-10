@@ -73,3 +73,22 @@
 .day-header {
   padding: 18px 0 6px;
 }
+
+/* Discover: the conversation. */
+.bubble {
+  padding: 10px 14px;
+  border-radius: 14px;
+}
+.bubble.user {
+  background-color: var(--accent-bg-color);
+  color: var(--accent-fg-color);
+  border-bottom-right-radius: 4px;
+}
+.bubble.assistant {
+  background-color: var(--card-bg-color);
+  color: var(--card-fg-color);
+  border-bottom-left-radius: 4px;
+}
+.bubble.error {
+  background-color: color-mix(in srgb, var(--error-bg-color) 25%, var(--card-bg-color));
+}

@@ -7,7 +7,6 @@ use gtk::prelude::*;
 pub const INDEX_URL: &str = "index-url";
 pub const HARNESS: &str = "harness";
 pub const MODEL: &str = "model";
-#[allow(dead_code)]
 pub const PROJECTS_DIR: &str = "projects-dir";
 pub const FOLLOW_OMARCHY_THEME: &str = "follow-omarchy-theme";
 pub const WINDOW_WIDTH: &str = "window-width";
