@@ -1,0 +1,53 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $OscoveryPreferencesDialog: Adw.PreferencesDialog {
+  title: _("Preferences");
+  content-width: 560;
+
+  Adw.PreferencesPage {
+    Adw.PreferencesGroup {
+      title: _("Coding agent");
+      description: _("Discover and security reviews run the agent you already use, on your own account.");
+
+      Adw.ComboRow harness_row {
+        title: _("Agent");
+      }
+
+      Adw.EntryRow model_row {
+        title: _("Model (optional)");
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Catalog");
+
+      Adw.EntryRow index_url_row {
+        title: _("Index URL");
+      }
+
+      Adw.ActionRow refresh_row {
+        title: _("Refresh now");
+        activatable-widget: refresh_button;
+
+        [suffix]
+        Gtk.Button refresh_button {
+          valign: center;
+          icon-name: "view-refresh-symbolic";
+          action-name: "app.refresh";
+
+          styles ["flat"]
+        }
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Appearance");
+
+      Adw.SwitchRow follow_omarchy_row {
+        title: _("Follow the Omarchy theme");
+        subtitle: _("Take the current theme's colours and light or dark style. Elsewhere this does nothing.");
+      }
+    }
+  }
+}

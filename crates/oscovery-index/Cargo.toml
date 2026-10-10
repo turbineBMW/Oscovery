@@ -1,0 +1,21 @@
+[package]
+name = "oscovery-index"
+description = "Builds Oscovery's catalog index from the Omarchy plugin marketplace, GitHub, the AUR and submissions"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "oscovery-index"
+path = "src/main.rs"
+
+[dependencies]
+oscovery-core = { path = "../oscovery-core" }
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+sha2 = "0.10"
+hex = "0.4"

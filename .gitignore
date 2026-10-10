@@ -1,0 +1,7 @@
+target/
+po/.rust-files
+po/.blp-files
+.cargo/
+CLAUDE.local.md
+site/
+state/

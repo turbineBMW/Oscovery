@@ -1,0 +1,75 @@
+/* Colours come from libadwaita's variables (var(--accent-bg-color) and
+   friends) so the system accent and an Omarchy theme reach everything. */
+
+.navigation-sidebar > row {
+  border-radius: 6px;
+}
+
+/* A catalog entry in a grid. */
+.entry-card {
+  border-radius: 12px;
+  background-color: var(--card-bg-color);
+  color: var(--card-fg-color);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--card-fg-color) 10%, transparent);
+  transition: background-color 150ms ease;
+}
+.entry-card:hover {
+  background-color: color-mix(in srgb, var(--card-bg-color) 90%, var(--accent-bg-color));
+}
+.entry-card .thumbnail {
+  border-radius: 12px 12px 0 0;
+  background-color: color-mix(in srgb, var(--accent-bg-color) 18%, var(--card-bg-color));
+}
+.entry-card .initials {
+  font-size: 2.4em;
+  font-weight: 800;
+  color: var(--accent-color);
+}
+.entry-card .body {
+  padding: 10px 12px 12px;
+}
+
+/* A kind, category or tag. */
+.chip {
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 0.8em;
+  background-color: color-mix(in srgb, var(--accent-bg-color) 20%, transparent);
+  color: var(--accent-color);
+}
+.chip.kind {
+  background-color: var(--accent-bg-color);
+  color: var(--accent-fg-color);
+}
+.chip.muted {
+  background-color: color-mix(in srgb, var(--window-fg-color) 10%, transparent);
+  color: var(--dim-label-color);
+}
+.chip.verified {
+  background-color: color-mix(in srgb, var(--success-bg-color) 25%, transparent);
+  color: var(--success-color);
+}
+
+/* The project page's hero. */
+.project-preview {
+  border-radius: 12px;
+}
+.project-initials {
+  border-radius: 16px;
+  background-color: color-mix(in srgb, var(--accent-bg-color) 18%, var(--window-bg-color));
+  color: var(--accent-color);
+  font-size: 2.8em;
+  font-weight: 800;
+}
+.install-command {
+  font-family: monospace;
+  font-size: 0.9em;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: color-mix(in srgb, var(--window-fg-color) 7%, transparent);
+}
+
+/* A Timeline day. */
+.day-header {
+  padding: 18px 0 6px;
+}

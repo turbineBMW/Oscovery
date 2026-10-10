@@ -1,0 +1,22 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $OscoveryDiscoverPage: Gtk.Box {
+  orientation: vertical;
+
+  Adw.StatusPage status_page {
+    icon-name: "system-search-symbolic";
+    title: _("Describe what you want");
+    description: _("Your coding agent will search the whole catalog and answer. This page is next in line; Browse and Timeline work today.");
+    vexpand: true;
+
+    child: Adw.Clamp {
+      maximum-size: 640;
+
+      Gtk.Entry prompt_entry {
+        placeholder-text: _("A bar widget that shows my 3D printer's progress…");
+        sensitive: false;
+      }
+    };
+  }
+}

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.turbinebmw.Oscovery</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>Oscovery</name>
+  <summary>Find Omarchy apps and plugins by describing them</summary>
+  <description>
+    <p>
+      Oscovery is a GTK 4 / libadwaita app for Omarchy. Describe what you want
+      and the coding agent you already use (Claude Code, Codex, opencode, pi)
+      searches a catalog of every known Omarchy plugin and app, answers with
+      matches, and keeps the conversation going. Browse and search classically
+      too, scroll a day-by-day timeline of what is new, see more by a developer
+      you like, and install, or have your agent review a project for security
+      first.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.turbinebmw.Oscovery.desktop</launchable>
+  <developer id="io.github.turbinebmw">
+    <name>Brandon Williams</name>
+  </developer>
+  <url type="homepage">https://github.com/turbinebmw/Oscovery</url>
+  <url type="vcs-browser">https://github.com/turbinebmw/Oscovery</url>
+  <url type="bugtracker">https://github.com/turbinebmw/Oscovery/issues</url>
+  <translation type="gettext">oscovery</translation>
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.1.0" date="2026-10-10">
+      <description>
+        <p>First scaffold: browse and search the catalog, project pages, timeline.</p>
+      </description>
+    </release>
+  </releases>
+</component>

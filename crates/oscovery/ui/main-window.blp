@@ -1,0 +1,147 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $OscoveryWindow: Adw.ApplicationWindow {
+  title: _("Oscovery");
+  width-request: 360;
+  height-request: 400;
+
+  content: Adw.ToastOverlay toast_overlay {
+    child: Adw.NavigationSplitView split {
+      min-sidebar-width: 200;
+      max-sidebar-width: 260;
+      sidebar-width-fraction: 0.18;
+
+      sidebar: Adw.NavigationPage {
+        title: _("Oscovery");
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {
+            [end]
+            Gtk.MenuButton {
+              primary: true;
+              icon-name: "open-menu-symbolic";
+              tooltip-text: _("Main Menu");
+              menu-model: primary_menu;
+            }
+          }
+
+          content: Gtk.Box {
+            orientation: vertical;
+
+            Gtk.ListBox sidebar_list {
+              selection-mode: single;
+              vexpand: true;
+
+              styles ["navigation-sidebar"]
+
+              Gtk.ListBoxRow {
+                name: "discover";
+                child: Gtk.Box {
+                  spacing: 10;
+                  Gtk.Image { icon-name: "system-search-symbolic"; }
+                  Gtk.Label { label: _("Discover"); xalign: 0; }
+                };
+              }
+
+              Gtk.ListBoxRow {
+                name: "browse";
+                child: Gtk.Box {
+                  spacing: 10;
+                  Gtk.Image { icon-name: "view-grid-symbolic"; }
+                  Gtk.Label { label: _("Browse"); xalign: 0; }
+                };
+              }
+
+              Gtk.ListBoxRow {
+                name: "timeline";
+                child: Gtk.Box {
+                  spacing: 10;
+                  Gtk.Image { icon-name: "x-office-calendar-symbolic"; }
+                  Gtk.Label { label: _("Timeline"); xalign: 0; }
+                };
+              }
+            }
+
+            Gtk.Label stats_label {
+              xalign: 0;
+              wrap: true;
+              margin-start: 18;
+              margin-end: 12;
+              margin-bottom: 12;
+
+              styles ["dim-label", "caption"]
+            }
+          };
+        };
+      };
+
+      content: Adw.NavigationPage content_page {
+        title: _("Browse");
+
+        child: Adw.NavigationView content_nav {
+          Adw.NavigationPage {
+            title: _("Browse");
+            tag: "root";
+
+            child: Adw.ToolbarView {
+              [top]
+              Adw.HeaderBar {
+                title-widget: Adw.WindowTitle section_title {
+                  title: _("Browse");
+                };
+
+                [end]
+                Adw.Spinner refresh_spinner {
+                  visible: false;
+                  tooltip-text: _("Updating the catalog…");
+                }
+              }
+
+              content: Gtk.Stack section_stack {
+                transition-type: crossfade;
+
+                StackPage {
+                  name: "discover";
+                  child: $OscoveryDiscoverPage discover_page {};
+                }
+
+                StackPage {
+                  name: "browse";
+                  child: $OscoveryBrowsePage browse_page {};
+                }
+
+                StackPage {
+                  name: "timeline";
+                  child: $OscoveryTimelinePage timeline_page {};
+                }
+              };
+            };
+          }
+        };
+      };
+    };
+  };
+}
+
+menu primary_menu {
+  section {
+    item {
+      label: _("_Refresh Catalog");
+      action: "app.refresh";
+    }
+  }
+
+  section {
+    item {
+      label: _("_Preferences");
+      action: "app.preferences";
+    }
+
+    item {
+      label: _("_About Oscovery");
+      action: "app.about";
+    }
+  }
+}

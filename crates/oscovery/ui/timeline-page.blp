@@ -1,0 +1,40 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $OscoveryTimelinePage: Gtk.Box {
+  orientation: vertical;
+
+  Gtk.ScrolledWindow scroller {
+    vexpand: true;
+    hscrollbar-policy: never;
+
+    child: Gtk.Box {
+      orientation: vertical;
+
+      Gtk.Box days_box {
+        orientation: vertical;
+        spacing: 6;
+        margin-start: 12;
+        margin-end: 12;
+        margin-bottom: 12;
+      }
+
+      Gtk.Button earlier_button {
+        label: _("Earlier");
+        halign: center;
+        margin-bottom: 18;
+        visible: false;
+
+        styles ["pill"]
+      }
+
+      Adw.StatusPage empty_page {
+        icon-name: "x-office-calendar-symbolic";
+        title: _("Nothing yet");
+        description: _("The timeline fills in once the catalog has been fetched.");
+        visible: false;
+        vexpand: true;
+      }
+    };
+  }
+}

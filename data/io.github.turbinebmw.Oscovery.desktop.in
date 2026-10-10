@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Oscovery
+GenericName=App and Plugin Discovery
+Comment=Describe what you want and find the Omarchy app or plugin that does it
+Exec=oscovery
+Icon=io.github.turbinebmw.Oscovery
+Terminal=false
+Type=Application
+Categories=System;Utility;GTK;
+Keywords=omarchy;plugins;apps;discover;store;
+StartupNotify=true
+DBusActivatable=true

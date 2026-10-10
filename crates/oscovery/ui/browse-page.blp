@@ -1,0 +1,79 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $OscoveryBrowsePage: Gtk.Box {
+  orientation: vertical;
+
+  Gtk.Box {
+    spacing: 6;
+    margin-start: 12;
+    margin-end: 12;
+    margin-top: 6;
+    margin-bottom: 6;
+
+    Gtk.SearchEntry search_entry {
+      hexpand: true;
+      placeholder-text: _("Search by name, words, tag or author");
+    }
+
+    Gtk.DropDown kind_dropdown {
+      tooltip-text: _("Kind");
+    }
+
+    Gtk.DropDown category_dropdown {
+      tooltip-text: _("Category");
+    }
+
+    Gtk.DropDown sort_dropdown {
+      tooltip-text: _("Sort");
+    }
+  }
+
+  Gtk.ScrolledWindow scroller {
+    vexpand: true;
+    hscrollbar-policy: never;
+
+    child: Gtk.Box {
+      orientation: vertical;
+
+      Gtk.Label result_label {
+        xalign: 0;
+        margin-start: 18;
+        margin-top: 6;
+        margin-bottom: 6;
+
+        styles ["dim-label", "caption"]
+      }
+
+      Gtk.FlowBox results {
+        homogeneous: true;
+        selection-mode: none;
+        min-children-per-line: 1;
+        max-children-per-line: 8;
+        column-spacing: 12;
+        row-spacing: 12;
+        margin-start: 12;
+        margin-end: 12;
+        margin-bottom: 12;
+        valign: start;
+      }
+
+      Gtk.Button more_button {
+        label: _("Show more");
+        halign: center;
+        margin-bottom: 18;
+        visible: false;
+
+        styles ["pill"]
+      }
+
+      Adw.StatusPage empty_page {
+        icon-name: "edit-find-symbolic";
+        title: _("Nothing matches");
+        description: _("Try fewer words, or describe it on the Discover page.");
+        visible: false;
+        vexpand: true;
+      }
+    };
+  }
+}

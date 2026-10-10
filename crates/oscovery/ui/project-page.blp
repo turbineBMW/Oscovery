@@ -1,0 +1,227 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $OscoveryProjectPage: Adw.NavigationPage {
+  title: _("Project");
+
+  child: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {}
+
+    content: Gtk.ScrolledWindow {
+      hscrollbar-policy: never;
+
+      child: Adw.Clamp {
+        maximum-size: 1000;
+        tightening-threshold: 700;
+
+        child: Gtk.Box {
+          orientation: vertical;
+          spacing: 18;
+          margin-start: 18;
+          margin-end: 18;
+          margin-top: 12;
+          margin-bottom: 24;
+
+          Gtk.Box {
+            spacing: 18;
+
+            Gtk.Label initials_label {
+              width-request: 96;
+              height-request: 96;
+              valign: start;
+
+              styles ["project-initials"]
+            }
+
+            Gtk.Box {
+              orientation: vertical;
+              spacing: 6;
+              hexpand: true;
+              valign: center;
+
+              Gtk.Label name_label {
+                xalign: 0;
+                wrap: true;
+                selectable: true;
+
+                styles ["title-1"]
+              }
+
+              Gtk.Box {
+                spacing: 6;
+
+                Gtk.Button author_button {
+                  valign: center;
+                  tooltip-text: _("More by this developer");
+
+                  styles ["flat"]
+                }
+
+                Gtk.Label version_label {
+                  valign: center;
+
+                  styles ["dim-label"]
+                }
+              }
+
+              Gtk.FlowBox chips_box {
+                selection-mode: none;
+                column-spacing: 6;
+                row-spacing: 6;
+                max-children-per-line: 12;
+              }
+            }
+          }
+
+          Gtk.Box {
+            spacing: 8;
+
+            Gtk.Button install_button {
+              styles ["suggested-action", "pill"]
+
+              child: Adw.ButtonContent {
+                icon-name: "folder-download-symbolic";
+                label: _("Install");
+              };
+            }
+
+            Gtk.Button review_button {
+              tooltip-text: _("Have your coding agent read the source for anything suspicious before installing");
+
+              styles ["pill"]
+
+              child: Adw.ButtonContent {
+                icon-name: "security-high-symbolic";
+                label: _("Review, then install");
+              };
+            }
+
+            Gtk.Box { hexpand: true; }
+
+            Gtk.Button repo_button {
+              tooltip-text: _("Open the repository in your browser");
+
+              styles ["flat"]
+
+              child: Adw.ButtonContent {
+                icon-name: "external-link-symbolic";
+                label: _("Repository");
+              };
+            }
+
+            Gtk.Button listing_button {
+              tooltip-text: _("Open the listing on plugins.omarchy.org");
+
+              styles ["flat"]
+
+              child: Adw.ButtonContent {
+                icon-name: "external-link-symbolic";
+                label: _("Marketplace");
+              };
+            }
+          }
+
+          Gtk.Label install_command {
+            xalign: 0;
+            wrap: true;
+            wrap-mode: word_char;
+            selectable: true;
+            visible: false;
+
+            styles ["install-command"]
+          }
+
+          Gtk.Label install_note {
+            xalign: 0;
+            wrap: true;
+            visible: false;
+
+            styles ["dim-label"]
+          }
+
+          Gtk.Picture preview {
+            can-shrink: true;
+            content-fit: contain;
+            halign: fill;
+            visible: false;
+
+            styles ["project-preview"]
+          }
+
+          Gtk.Label summary_label {
+            xalign: 0;
+            wrap: true;
+            selectable: true;
+
+            styles ["title-4"]
+          }
+
+          Gtk.Label description_label {
+            xalign: 0;
+            wrap: true;
+            selectable: true;
+            visible: false;
+          }
+
+          Gtk.FlowBox tags_box {
+            selection-mode: none;
+            column-spacing: 6;
+            row-spacing: 6;
+            max-children-per-line: 16;
+          }
+
+          Gtk.Label meta_label {
+            xalign: 0;
+            wrap: true;
+
+            styles ["dim-label", "caption"]
+          }
+
+          Gtk.Box more_group {
+            orientation: vertical;
+            spacing: 8;
+            visible: false;
+
+            Gtk.Label more_title {
+              xalign: 0;
+
+              styles ["heading"]
+            }
+
+            Gtk.FlowBox more_box {
+              homogeneous: true;
+              selection-mode: none;
+              min-children-per-line: 1;
+              max-children-per-line: 6;
+              column-spacing: 12;
+              row-spacing: 12;
+            }
+          }
+
+          Gtk.Box similar_group {
+            orientation: vertical;
+            spacing: 8;
+            visible: false;
+
+            Gtk.Label {
+              label: _("Similar projects");
+              xalign: 0;
+
+              styles ["heading"]
+            }
+
+            Gtk.FlowBox similar_box {
+              homogeneous: true;
+              selection-mode: none;
+              min-children-per-line: 1;
+              max-children-per-line: 6;
+              column-spacing: 12;
+              row-spacing: 12;
+            }
+          }
+        };
+      };
+    };
+  };
+}

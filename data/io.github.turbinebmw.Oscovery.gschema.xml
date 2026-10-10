@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="oscovery">
+	<schema id="io.github.turbinebmw.Oscovery" path="/io/github/turbinebmw/Oscovery/">
+		<key name="index-url" type="s">
+			<default>'https://turbinebmw.github.io/oscovery-index/index.json'</default>
+			<summary>Catalog index URL</summary>
+			<description>Where the catalog index is fetched from. A file:// URL or a plain path reads a local build.</description>
+		</key>
+		<key name="harness" type="s">
+			<choices>
+				<choice value=""/>
+				<choice value="claude"/>
+				<choice value="codex"/>
+				<choice value="opencode"/>
+				<choice value="pi"/>
+			</choices>
+			<default>''</default>
+			<summary>Coding agent to ask</summary>
+			<description>The command-line coding agent Discover and security reviews run. Empty picks the first one installed.</description>
+		</key>
+		<key name="model" type="s">
+			<default>''</default>
+			<summary>Model name passed to the agent</summary>
+			<description>Empty leaves the agent's own default.</description>
+		</key>
+		<key name="projects-dir" type="s">
+			<default>''</default>
+			<summary>Where cloned projects go</summary>
+			<description>Empty means ~/Projects.</description>
+		</key>
+		<key name="follow-omarchy-theme" type="b">
+			<default>true</default>
+			<summary>Follow the Omarchy theme</summary>
+			<description>On Omarchy, take the current theme's colours and dark or light style. Elsewhere this does nothing.</description>
+		</key>
+		<key name="window-width" type="i">
+			<range min="360" max="10000"/>
+			<default>1280</default>
+			<summary>Window width</summary>
+		</key>
+		<key name="window-height" type="i">
+			<range min="400" max="10000"/>
+			<default>820</default>
+			<summary>Window height</summary>
+		</key>
+		<key name="window-maximized" type="b">
+			<default>false</default>
+			<summary>Window maximized</summary>
+		</key>
+	</schema>
+</schemalist>
