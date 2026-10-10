@@ -147,8 +147,9 @@ impl OscoveryWindow {
     }
 
     /// `OSCOVERY_DEBUG_SECTION=timeline` shows that section at launch;
-    /// `OSCOVERY_DEBUG_OPEN=<entry id>` opens that project's page. For
-    /// screenshots and for looking at one page without clicking there.
+    /// `OSCOVERY_DEBUG_OPEN=<entry id>` opens that project's page;
+    /// `OSCOVERY_DEBUG_REVIEW=<entry id>` starts its review. For screenshots
+    /// and for looking at one page without clicking there.
     fn apply_debug_hooks(&self) {
         if let Ok(section) = std::env::var("OSCOVERY_DEBUG_SECTION") {
             self.select_section(&section);
@@ -158,6 +159,14 @@ impl OscoveryWindow {
             match entry {
                 Some(entry) => self.open_entry(&entry),
                 None => tracing::warn!("OSCOVERY_DEBUG_OPEN: no entry {id}"),
+            }
+        }
+        // `OSCOVERY_DEBUG_REVIEW=<entry id>` starts that project's security review.
+        if let Ok(id) = std::env::var("OSCOVERY_DEBUG_REVIEW") {
+            let entry = self.db().borrow().entry(&id).ok().flatten();
+            match entry {
+                Some(entry) => self.open_review(&entry),
+                None => tracing::warn!("OSCOVERY_DEBUG_REVIEW: no entry {id}"),
             }
         }
     }

@@ -1,0 +1,38 @@
+name: Submit a project
+description: Add an Omarchy app or plugin to the Oscovery catalog
+title: "Submit: "
+labels: [submission]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Plugins listed on plugins.omarchy.org and repositories tagged with the `omarchy`,
+        `omarchy-plugin` or `omarchy-app` topic are picked up automatically every day. Use
+        this form for anything else, or to flag that you are looking for contributors.
+  - type: input
+    id: repo
+    attributes:
+      label: Repository
+      placeholder: https://github.com/owner/name
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is it?
+      options:
+        - An app (desktop, terminal or tool)
+        - An Omarchy shell plugin
+    validations:
+      required: true
+  - type: checkboxes
+    id: contributors
+    attributes:
+      label: Collaboration
+      options:
+        - label: I am looking for contributors; show "Wants contributors" on the project page
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Install notes, which Omarchy version it needs, a related project it extends.

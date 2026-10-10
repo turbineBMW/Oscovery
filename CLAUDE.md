@@ -29,7 +29,7 @@ WebP needs no pixbuf loader). Edition 2024, MSRV 1.88.
 Dev hooks: `OSCOVERY_INDEX=<path or URL>` overrides the index source (a checkout's
 `site/index.json` after `just index`); `oscovery import <index.json>` loads one into the
 catalog without the GUI; `OSCOVERY_DEBUG_SECTION=discover|browse|timeline` and
-`OSCOVERY_DEBUG_OPEN=<entry id>` open there at launch; `oscovery ask "<question>"` runs one
+`OSCOVERY_DEBUG_OPEN=<entry id>` open there at launch, `OSCOVERY_DEBUG_REVIEW=<entry id>` starts a review; `oscovery ask "<question>"` runs one
 Discover question headlessly and prints the parsed answer (the best way to iterate on
 `harness::INSTRUCTIONS`). Note `env -u CLAUDECODE` when testing from inside Claude Code. For a screenshot on Hyprland:
 `hyprctl clients -j` for the window geometry (class `io.github.turbinebmw.Oscovery`), `grim -g`.

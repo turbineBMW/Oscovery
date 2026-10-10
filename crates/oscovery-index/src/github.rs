@@ -182,6 +182,11 @@ pub async fn classify(http: &Http, repo: &Repo, today: NaiveDate) -> Classified 
         .as_ref()
         .and_then(|l| l.spdx_id.clone())
         .unwrap_or_default();
+    // A repository without a description: its README's first sentence.
+    let summary = match repo.description.as_deref().map(str::trim) {
+        Some(text) if !text.is_empty() => text.to_string(),
+        _ => readme::first_sentence(&readme_text),
+    };
     let base = Entry {
         id: format!("gh:{}", repo.full_name.to_lowercase()),
         kind: Kind::App,
@@ -192,12 +197,7 @@ pub async fn classify(http: &Http, repo: &Repo, today: NaiveDate) -> Classified 
             .next()
             .unwrap_or(&repo.full_name)
             .to_string(),
-        summary: repo
-            .description
-            .clone()
-            .unwrap_or_default()
-            .trim()
-            .to_string(),
+        summary,
         description: readme_text,
         author: repo.owner.login.clone(),
         author_key: repo.owner.login.to_lowercase(),

@@ -33,13 +33,14 @@ struct Args {
     github_limit: usize,
     aur: bool,
     token: Option<String>,
+    sources: PathBuf,
 }
 
 fn usage() -> ! {
     eprintln!(
         "usage: oscovery-index build --out <dir> [--state <dir>] [--marketplace <url|path>]\n\
          \x20                           [--no-github] [--github-limit <n>] [--no-aur] [--token <t>]\n\
-         \n  --marketplace   the marketplace catalog.json (default: {})\n  --state         where first_seen.json lives (default: <out>/../state)\n  --token         a GitHub token (default: $GITHUB_TOKEN, else `gh auth token`)",
+         \n  --marketplace   the marketplace catalog.json (default: {})\n  --state         where first_seen.json lives (default: <out>/../state)\n  --sources       a directory of submitted projects, one TOML each (default: ./sources)\n  --token         a GitHub token (default: $GITHUB_TOKEN, else `gh auth token`)",
         marketplace::CATALOG
     );
     std::process::exit(2)
@@ -64,6 +65,7 @@ fn parse_args() -> Args {
             "--marketplace" => args.marketplace = value(),
             "--github-limit" => args.github_limit = value().parse().unwrap_or_else(|_| usage()),
             "--token" => args.token = Some(value()),
+            "--sources" => args.sources = PathBuf::from(value()),
             "--no-github" => args.github = false,
             "--no-aur" => args.aur = false,
             _ => usage(),
@@ -75,7 +77,42 @@ fn parse_args() -> Args {
     if args.state.as_os_str().is_empty() {
         args.state = args.out.parent().unwrap_or(Path::new(".")).join("state");
     }
+    if args.sources.as_os_str().is_empty() {
+        args.sources = PathBuf::from("sources");
+    }
     args
+}
+
+/// A submitted project: `sources/<name>.toml`.
+#[derive(Default, serde::Deserialize)]
+struct Submission {
+    repo: String,
+    #[serde(default)]
+    wants_contributors: bool,
+    #[serde(default)]
+    category: String,
+}
+
+fn load_submissions(dir: &Path) -> Vec<Submission> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut submissions = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_none_or(|ext| ext != "toml") {
+            continue;
+        }
+        match std::fs::read_to_string(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|text| toml::from_str::<Submission>(&text).map_err(|e| e.to_string()))
+        {
+            Ok(submission) if !submission.repo.trim().is_empty() => submissions.push(submission),
+            Ok(_) => eprintln!("{}: no repo", path.display()),
+            Err(error) => eprintln!("{}: {error}", path.display()),
+        }
+    }
+    submissions
 }
 
 /// One HTTP client for every source, with the GitHub token when there is
@@ -241,6 +278,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         eprintln!("github: {plugins} plugins, {apps} apps added");
+    }
+
+    // 2b. Submitted projects: fetched by name, past the floor, classified
+    // like the rest.
+    let submissions = load_submissions(&args.sources);
+    if !submissions.is_empty() {
+        let mut added = 0;
+        for submission in &submissions {
+            let Some(slug) = oscovery_core::models::github_slug(&submission.repo) else {
+                eprintln!("submission {}: not a GitHub repository", submission.repo);
+                continue;
+            };
+            if known_repos.contains_key(&slug.to_lowercase()) {
+                continue;
+            }
+            let url = format!("https://api.github.com/repos/{slug}");
+            let Some(repo) = http.get_json::<github::Repo>(&url).await else {
+                eprintln!("submission {slug}: not found");
+                continue;
+            };
+            if repo.archived {
+                continue;
+            }
+            let entry = match github::classify(&http, &repo, today).await {
+                github::Classified::Plugin(entry) | github::Classified::App(entry) => entry,
+                github::Classified::Skip => {
+                    eprintln!("submission {slug}: nothing to classify (no README?)");
+                    continue;
+                }
+            };
+            let mut entry = entry;
+            entry.source = "submitted".into();
+            entry.wants_contributors |= submission.wants_contributors;
+            if !submission.category.is_empty() {
+                entry.category = submission.category.clone();
+            }
+            if let Some(key) = repo_key(&entry.repo) {
+                known_repos.insert(key, entries.len());
+            }
+            entries.push(entry);
+            added += 1;
+        }
+        eprintln!("submissions: {} files, {added} added", submissions.len());
     }
 
     // 3. The AUR: packages, merged onto their GitHub project when both exist.

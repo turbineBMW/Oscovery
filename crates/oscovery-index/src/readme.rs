@@ -69,6 +69,27 @@ pub fn excerpt(readme: &str) -> String {
     text
 }
 
+/// The first sentence of an excerpt, as a summary, at most ~160 characters.
+pub fn first_sentence(text: &str) -> String {
+    let first = text.lines().next().unwrap_or("").trim();
+    let sentence = match first.find(['.', '!', '?']) {
+        Some(end) if end + 1 < first.len() => &first[..=end],
+        _ => first,
+    };
+    let mut summary = sentence.to_string();
+    if summary.len() > 160 {
+        let cut = summary
+            .char_indices()
+            .map(|(i, _)| i)
+            .take_while(|i| *i <= 157)
+            .last()
+            .unwrap_or(0);
+        summary.truncate(cut);
+        summary.push('…');
+    }
+    summary
+}
+
 /// Links keep their text; inline HTML and emphasis markers go.
 fn strip_markup(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
@@ -105,6 +126,16 @@ mod tests {
     fn badges_headings_code_and_html_go() {
         let readme = "# Tool\n\n[![ci](x)](y)\n\n<p align=center><img src=x></p>\n\nA **tool** for `things` with a [link](http://x).\n\n```sh\nmake\n```\n\n## Install\n\n| a | b |\n\nRun it.\n";
         assert_eq!(excerpt(readme), "A tool for things with a link.\nRun it.");
+    }
+
+    #[test]
+    fn the_first_sentence_summarises() {
+        assert_eq!(
+            first_sentence("A fast client. It does things.\nMore."),
+            "A fast client."
+        );
+        assert_eq!(first_sentence("No period here\nnext"), "No period here");
+        assert!(first_sentence(&"word ".repeat(100)).ends_with('…'));
     }
 
     #[test]
