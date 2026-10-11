@@ -11,10 +11,11 @@ body:
 
         - plugins listed on plugins.omarchy.org;
         - repositories with an `oscovery.toml` at the root of the default branch
-          (an empty file is enough; see the README for the fields);
+          that mention Omarchy in their name, description, README or topics (an
+          empty file is enough; see the README for the fields);
         - repositories tagged with the `omarchy-plugin` or `omarchy-app` topic.
 
-        Use this form when code search hasn't seen your `oscovery.toml` yet, or to
+        Use this form when your repository mentions Omarchy nowhere, or to
         flag that you are looking for contributors. **Only submit a repository you
         own**: a submission is listed when the person opening this issue owns the
         repository, or the repository has an `oscovery.toml` or an opt-in topic.

@@ -1,7 +1,8 @@
 # Builds the catalog index daily and publishes it on GitHub Pages:
 #   https://<owner>.github.io/<repo>/index.json
-# The Timeline's first_seen memory lives on the site itself (first_seen.json),
-# fetched before each build, so nothing is committed back.
+# The build's memory lives on the site itself, fetched before each build, so
+# nothing is committed back: first_seen.json (the Timeline) and opt_in.json
+# (which repositories have an oscovery.toml, and up to when pushes were checked).
 #
 # One-time setup: Settings -> Pages -> Source: "GitHub Actions".
 name: index
@@ -39,14 +40,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ". -> target"
-      - name: Fetch yesterday's first_seen memory from the live site
+      - name: Fetch the last build's memory from the live site
         run: |
           mkdir -p state
-          url="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/first_seen.json"
-          curl -fsSL "$url" -o state/first_seen.json || echo "no previous state at $url (first build)"
+          site="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+          for file in first_seen.json opt_in.json; do
+            curl -fsSL "$site/$file" -o "state/$file" || echo "no previous $file at $site (first build)"
+          done
       - name: Build the index
         env:
-          # Code search needs a token, and it lifts the API limit from 60
+          # Search needs a token for code and lifts the API limit from 60
           # requests an hour to 1,000.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo run --release -p oscovery-index -- build --out site --state state

@@ -55,16 +55,22 @@ crates/oscovery-core/src/  no widgets; everything here is unit-tested (`cargo te
   omarchy.rs   Omarchy colors.toml -> libadwaita CSS variables (ported from Skali/Rustle)
 crates/oscovery-index/     the crawler, run by .github/workflows/index.yml daily onto Pages:
   main.rs      `build --out site [--state d] [--marketplace src] [--no-github]
-               [--github-limit n] [--no-aur] [--token t]`; Http (token, 403/429 backoff);
+               [--github-limit n] [--lookback-days n] [--no-aur] [--token t]`; Http (token
+               on api + raw, 403/429 backoff, waits out x-ratelimit-reset);
                merge order marketplace > github > aur (AUR folds onto a GitHub app with the
                same repo); first_seen.json (the Timeline's axis; seeded from each source's
-               own date on a fresh state; published with the site so Actions can fetch it);
+               own date on a fresh state) and opt_in.json, both published with the site so
+               Actions can fetch them;
                consent: a submission needs submitted_by == owner or the repo's own
                opt-in; then opt-outs (manifests of marketplace/AUR repos, sources/removed.txt)
   marketplace.rs  plugins.omarchy.org/catalog.json -> Entry (install command, previews)
-  github.rs    opt-in only: oscovery.toml (code search; OscoveryToml corrects fields,
-               `listed = false` opts out of every source) or topics omarchy-plugin/
-               omarchy-app; never the broad omarchy topic. Topic repos pass a quality
+  github.rs    opt-in only: oscovery.toml (raw-fetched from repos that mention omarchy
+               and were pushed since opt_in.json's checked_through, pushed_between
+               halving windows past search's 1000 cap; plus last build's opt_in.json
+               repos and code_search, whose index skips many repos; OscoveryToml
+               corrects fields, `listed = false` opts out of every source) or topics
+               omarchy-plugin/omarchy-app; mentioning omarchy alone never lists a repo.
+               Topic repos pass a quality
                floor (passes_floor: not archived/fork, described, SPDX license, pushed
                < 18 months, no themes/dotfiles),
                classify by root tree: manifest.json with a real kind -> plugin, else app

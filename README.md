@@ -33,13 +33,15 @@ account.
 ## For project authors
 
 Oscovery only lists projects that were published to be found: plugins on
-plugins.omarchy.org, AUR packages, and GitHub repositories that opted in. It does not crawl
-the broad `omarchy` topic, where plenty of repositories are someone's own setup.
+plugins.omarchy.org, AUR packages, and GitHub repositories that opted in. A repository that
+merely mentions Omarchy is never listed without asking: plenty of them are someone's own setup.
 
 **To be listed**, add an `oscovery.toml` at the root of your default branch. An empty file
-is enough. Tagging the repository `omarchy-plugin` or `omarchy-app` also works, if it passes
-a basic quality floor (a description, a license, a push in the last 18 months). Every field
-is optional and corrects what Oscovery would otherwise guess:
+is enough. The daily build looks for it in every repository that mentions Omarchy in its
+name, description, README or topics and was pushed since the previous build, so it shows up
+the day after you commit it. Tagging the repository `omarchy-plugin` or `omarchy-app` also
+works, if it passes a basic quality floor (a description, a license, a push in the last 18
+months). Every field is optional and corrects what Oscovery would otherwise guess:
 
 ```toml
 summary = "One sentence on what it does"
@@ -62,9 +64,9 @@ listed = false
 
 The next daily build drops it. Without a GitHub repository, or for everything you publish,
 use the [Remove my project](https://github.com/turbineBMW/Oscovery/issues/new?template=remove-project.yml)
-form. Code search can take a while to notice a new `oscovery.toml`; the
+form. If your repository mentions Omarchy nowhere, add the file and use the
 [Submit a project](https://github.com/turbineBMW/Oscovery/issues/new?template=submit-project.yml)
-form gets you in sooner.
+form once.
 
 ## Running
 

@@ -2,9 +2,10 @@
 
 ## Submitted
 
-One TOML file per project that the daily build would not find on its own: no
-`oscovery.toml` yet (code search can take a while to see a new one), no
-`omarchy-plugin` / `omarchy-app` topic, or below the topic crawl's quality floor
+One TOML file per project that the daily build would not find on its own: an
+`oscovery.toml` in a repository that mentions Omarchy nowhere (the build only
+looks for the file in ones that do), no `omarchy-plugin` / `omarchy-app` topic,
+or below the topic crawl's quality floor
 for a reason the maintainer accepts. The build classifies each repository the same
 way as a crawled one.
 
