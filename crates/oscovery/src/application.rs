@@ -171,21 +171,24 @@ impl OscoveryApplication {
         }
     }
 
-    /// Fetch the catalog at launch when it is empty or older than
-    /// `REFRESH_AFTER`.
+    /// Fetch the catalog at launch when it is empty, older than
+    /// `REFRESH_AFTER`, or came from another index URL.
     fn refresh_if_stale(&self) {
         let db = self.db();
-        let (count, fetched_at) = {
+        let (count, fetched_at, fetched_from) = {
             let db = db.borrow();
             (
                 db.count().unwrap_or(0),
                 db.meta("index-fetched-at").ok().flatten(),
+                db.meta("index-url").ok().flatten(),
             )
         };
         let fresh = fetched_at
             .and_then(|at| chrono::DateTime::parse_from_rfc3339(&at).ok())
             .is_some_and(|at| chrono::Utc::now() - at.with_timezone(&chrono::Utc) < REFRESH_AFTER);
-        if count == 0 || !fresh {
+        let same_source =
+            fetched_from.as_deref() == Some(settings::index_url(&self.settings()).as_str());
+        if count == 0 || !fresh || !same_source {
             self.refresh_index(false);
         }
     }
@@ -199,12 +202,15 @@ impl OscoveryApplication {
         }
         let db = self.db();
         let url = settings::index_url(&self.settings());
-        let etag = db
-            .borrow()
-            .meta("index-etag")
-            .ok()
-            .flatten()
-            .filter(|e| !e.is_empty());
+        // An ETag only means something to the URL that sent it.
+        let etag = {
+            let db = db.borrow();
+            let fetched_from = db.meta("index-url").ok().flatten();
+            db.meta("index-etag")
+                .ok()
+                .flatten()
+                .filter(|e| !e.is_empty() && fetched_from.as_deref() == Some(url.as_str()))
+        };
         let empty = db.borrow().count().unwrap_or(0) == 0;
         if let Some(window) = self.main_window() {
             window.set_refreshing(true);
