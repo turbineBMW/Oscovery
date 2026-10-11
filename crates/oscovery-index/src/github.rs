@@ -1,8 +1,9 @@
 //! GitHub: repositories that opted in, either with an `oscovery.toml` at
 //! their root or with the `omarchy-plugin` / `omarchy-app` topic (the topic
 //! ones also pass a quality floor), classified by what their root holds,
-//! with a README excerpt. The broad `omarchy` topic is not crawled: it is
-//! full of personal setups that were never meant for a catalog.
+//! with a README excerpt. Repositories that merely mention Omarchy are only
+//! looked at for the file, never listed without it: plenty of them are
+//! personal setups that were never meant for a catalog.
 
 use crate::{Http, readme};
 use chrono::{DateTime, Duration, NaiveDate, Utc};
@@ -16,6 +17,9 @@ pub const OPT_IN_TOPICS: [&str; 2] = ["omarchy-plugin", "omarchy-app"];
 /// The file at a repository's root that opts it in (and, with
 /// `listed = false`, out).
 pub const MANIFEST: &str = "oscovery.toml";
+/// Searches for repositories that mention Omarchy, the ones looked at for
+/// an `oscovery.toml`.
+const MENTION_QUERIES: [&str; 2] = ["omarchy+in:name,description,readme", "topic:omarchy"];
 /// GitHub search returns at most this many per query.
 const SEARCH_CAP: usize = 1000;
 /// Pushed longer ago than this and a project is left out.
@@ -59,6 +63,8 @@ pub struct Owner {
 
 #[derive(Deserialize)]
 struct SearchPage {
+    #[serde(default)]
+    total_count: usize,
     items: Vec<Repo>,
 }
 
@@ -232,10 +238,10 @@ struct CodeRepo {
     full_name: String,
 }
 
-/// Every repository with an `oscovery.toml` at its root. Code search needs
-/// a token and only sees default branches, and a new file can take a while
-/// to show up; the submission form covers the gap.
-pub async fn opted_in(http: &Http) -> Vec<Repo> {
+/// Repositories code search says have an `oscovery.toml` at their root.
+/// Its index leaves out many repositories, so this only adds to
+/// `pushed_between`.
+pub async fn code_search(http: &Http) -> Vec<String> {
     let mut names = BTreeSet::new();
     for page in 1..=SEARCH_CAP / 100 {
         let url = format!(
@@ -256,14 +262,70 @@ pub async fn opted_in(http: &Http) -> Vec<Repo> {
             break;
         }
     }
+    names.into_iter().collect()
+}
+
+/// What can have just gained an `oscovery.toml` (adding it is a push):
+/// repositories that mention Omarchy in their name, description, README or
+/// topics, pushed between `since` and `until`. A search returns at most
+/// 1000, so a busy window is halved until each half fits. `false` when part
+/// of the window couldn't be read.
+pub async fn pushed_between(
+    http: &Http,
+    since: DateTime<Utc>,
+    until: DateTime<Utc>,
+) -> (Vec<Repo>, bool) {
+    let stamp = |at: DateTime<Utc>| at.format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let mut seen = HashSet::new();
     let mut repos = Vec::new();
-    for name in names {
-        let url = format!("https://api.github.com/repos/{name}");
-        if let Some(repo) = http.get_json::<Repo>(&url).await {
-            repos.push(repo);
+    let mut complete = true;
+    for query in MENTION_QUERIES {
+        let mut windows = vec![(since, until)];
+        while let Some((from, to)) = windows.pop() {
+            let mut page = 1;
+            loop {
+                let url = format!(
+                    "https://api.github.com/search/repositories?q={query}+pushed:{}..{}&per_page=100&page={page}",
+                    stamp(from),
+                    stamp(to)
+                );
+                let Some(found) = http.get_json::<SearchPage>(&url).await else {
+                    complete = false;
+                    break;
+                };
+                if page == 1 && found.total_count > SEARCH_CAP {
+                    if to - from > Duration::minutes(1) {
+                        let middle = from + (to - from) / 2;
+                        windows.push((from, middle));
+                        windows.push((middle, to));
+                        break;
+                    }
+                    eprintln!(
+                        "github: over {SEARCH_CAP} pushed within a minute at {}",
+                        stamp(from)
+                    );
+                    complete = false;
+                }
+                let count = found.items.len();
+                for repo in found.items {
+                    if seen.insert(repo.full_name.to_lowercase()) {
+                        repos.push(repo);
+                    }
+                }
+                if count < 100 || page * 100 >= SEARCH_CAP {
+                    break;
+                }
+                page += 1;
+            }
         }
     }
-    repos
+    (repos, complete)
+}
+
+/// One repository by name.
+pub async fn repo(http: &Http, full_name: &str) -> Option<Repo> {
+    http.get_json(&format!("https://api.github.com/repos/{full_name}"))
+        .await
 }
 
 /// Every repository the topic searches return, deduplicated, at most

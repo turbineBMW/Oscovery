@@ -33,6 +33,7 @@ struct Args {
     marketplace: String,
     github: bool,
     github_limit: usize,
+    lookback_days: i64,
     aur: bool,
     token: Option<String>,
     sources: PathBuf,
@@ -41,8 +42,9 @@ struct Args {
 fn usage() -> ! {
     eprintln!(
         "usage: oscovery-index build --out <dir> [--state <dir>] [--marketplace <url|path>]\n\
-         \x20                           [--no-github] [--github-limit <n>] [--no-aur] [--token <t>]\n\
-         \n  --marketplace   the marketplace catalog.json (default: {})\n  --state         where first_seen.json lives (default: <out>/../state)\n  --sources       a directory of submitted projects, one TOML each (default: ./sources)\n  --token         a GitHub token (default: $GITHUB_TOKEN, else `gh auth token`)",
+         \x20                           [--no-github] [--github-limit <n>] [--lookback-days <n>]\n\
+         \x20                           [--no-aur] [--token <t>]\n\
+         \n  --marketplace   the marketplace catalog.json (default: {})\n  --state         where first_seen.json and opt_in.json live (default: <out>/../state)\n  --lookback-days without opt_in.json, how far back to look for new pushes (default: 3)\n  --sources       a directory of submitted projects, one TOML each (default: ./sources)\n  --token         a GitHub token (default: $GITHUB_TOKEN, else `gh auth token`)",
         marketplace::CATALOG
     );
     std::process::exit(2)
@@ -52,6 +54,7 @@ fn parse_args() -> Args {
     let mut args = Args {
         marketplace: marketplace::CATALOG.into(),
         github: true,
+        lookback_days: 3,
         aur: true,
         ..Default::default()
     };
@@ -66,6 +69,7 @@ fn parse_args() -> Args {
             "--state" => args.state = PathBuf::from(value()),
             "--marketplace" => args.marketplace = value(),
             "--github-limit" => args.github_limit = value().parse().unwrap_or_else(|_| usage()),
+            "--lookback-days" => args.lookback_days = value().parse().unwrap_or_else(|_| usage()),
             "--token" => args.token = Some(value()),
             "--sources" => args.sources = PathBuf::from(value()),
             "--no-github" => args.github = false,
@@ -143,12 +147,15 @@ impl Http {
     async fn get(&self, url: &str) -> Option<reqwest::Response> {
         for attempt in 0..3 {
             let mut request = self.client.get(url);
-            if url.starts_with("https://api.github.com/")
-                && let Some(token) = &self.token
-            {
-                request = request
-                    .bearer_auth(token)
-                    .header("Accept", "application/vnd.github+json");
+            if let Some(token) = &self.token {
+                if url.starts_with("https://api.github.com/") {
+                    request = request
+                        .bearer_auth(token)
+                        .header("Accept", "application/vnd.github+json");
+                } else if url.starts_with("https://raw.githubusercontent.com/") {
+                    // Raw files have their own, tighter limit without one.
+                    request = request.bearer_auth(token);
+                }
             }
             match request.send().await {
                 Ok(response) if response.status().is_success() => return Some(response),
@@ -239,6 +246,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("no GitHub token: the crawl will be slow and shallow");
     }
 
+    let mut opt_in = load_opt_in(&args.state.join("opt_in.json"));
+
     // 1. The marketplace: every listed plugin.
     let marketplace = marketplace::fetch(&http, &args.marketplace).await?;
     let mut entries: Vec<Entry> = marketplace
@@ -253,10 +262,76 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     // 2. GitHub: plugins the marketplace missed, and apps, from repositories
-    // that opted in. One with an `oscovery.toml` asked to be listed, so only
-    // the topic ones have to pass the quality floor.
+    // that opted in. An `oscovery.toml` is looked for in every repository
+    // that mentions Omarchy and was pushed since the last build (adding the
+    // file is a push), in the ones that had it last time, and in whatever
+    // code search finds. Those asked to be listed, so only the topic ones
+    // have to pass the quality floor.
     if args.github {
-        let opted_in = github::opted_in(&http).await;
+        let started = Utc::now();
+        let since = opt_in
+            .checked_through
+            .map(|at| at - chrono::Duration::hours(6))
+            .unwrap_or(started - chrono::Duration::days(args.lookback_days));
+        let (recent, complete) = github::pushed_between(&http, since, started).await;
+        let pushed = recent.len();
+        let mut repos: HashMap<String, github::Repo> = recent
+            .into_iter()
+            .map(|repo| (repo.full_name.to_lowercase(), repo))
+            .collect();
+        let mut names: BTreeMap<String, String> = repos
+            .iter()
+            .map(|(key, repo)| (key.clone(), repo.full_name.clone()))
+            .collect();
+        for name in opt_in
+            .repos
+            .iter()
+            .cloned()
+            .chain(github::code_search(&http).await)
+        {
+            names.entry(name.to_lowercase()).or_insert(name);
+        }
+        eprintln!(
+            "github: looking for an {} in {} repositories ({pushed} pushed since {since})",
+            github::MANIFEST,
+            names.len()
+        );
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(16));
+        let mut tasks = tokio::task::JoinSet::new();
+        for (key, name) in names {
+            let branch = repos
+                .get(&key)
+                .map_or_else(|| "HEAD".to_string(), |repo| repo.default_branch.clone());
+            let http = http.clone();
+            let permit = semaphore.clone().acquire_owned().await?;
+            tasks.spawn(async move {
+                let found = github::manifest(&http, &name, &branch).await.is_some();
+                drop(permit);
+                (key, name, found)
+            });
+        }
+        let mut with_file = BTreeMap::new();
+        while let Some(result) = tasks.join_next().await {
+            if let (key, name, true) = result? {
+                with_file.insert(key, name);
+            }
+        }
+        let mut opted_in = Vec::new();
+        for (key, name) in &with_file {
+            let repo = match repos.remove(key) {
+                Some(repo) => Some(repo),
+                None => github::repo(&http, name).await,
+            };
+            opted_in.extend(repo);
+        }
+        opt_in.repos = with_file.into_values().collect();
+        if complete {
+            opt_in.checked_through = Some(started);
+        } else {
+            eprintln!(
+                "github: the search for recent pushes was incomplete; the next build looks again from {since}"
+            );
+        }
         eprintln!(
             "github: {} repositories with an {}",
             opted_in.len(),
@@ -509,6 +584,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let first_seen_json = serde_json::to_vec_pretty(&first_seen)?;
     std::fs::write(args.state.join("first_seen.json"), &first_seen_json)?;
     std::fs::write(args.out.join("first_seen.json"), &first_seen_json)?;
+    let opt_in_json = serde_json::to_vec_pretty(&opt_in)?;
+    std::fs::write(args.state.join("opt_in.json"), &opt_in_json)?;
+    std::fs::write(args.out.join("opt_in.json"), &opt_in_json)?;
     eprintln!(
         "wrote {} entries ({} plugins, {} apps) to {}",
         index.entries.len(),
@@ -517,6 +595,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.out.display()
     );
     Ok(())
+}
+
+/// `opt_in.json`: the repositories that had an `oscovery.toml` at the last
+/// build, and up to when pushes were looked at. Published with the site,
+/// like first_seen.json, for the next build.
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+struct OptIn {
+    #[serde(default)]
+    checked_through: Option<chrono::DateTime<Utc>>,
+    #[serde(default)]
+    repos: Vec<String>,
+}
+
+fn load_opt_in(path: &Path) -> OptIn {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
 }
 
 fn load_first_seen(path: &Path) -> BTreeMap<String, NaiveDate> {
