@@ -8,8 +8,13 @@ template $OscoveryProjectPage: Adw.NavigationPage {
     [top]
     Adw.HeaderBar {}
 
-    content: Gtk.ScrolledWindow {
+    content: Gtk.ScrolledWindow scroller {
       hscrollbar-policy: never;
+
+      // Natural heights, so a README picture gets the height its width
+      // calls for rather than the nothing it could shrink to.
+      child: Gtk.Viewport {
+      vscroll-policy: natural;
 
       child: Adw.Clamp {
         maximum-size: 1000;
@@ -62,6 +67,42 @@ template $OscoveryProjectPage: Adw.NavigationPage {
                   valign: center;
 
                   styles ["dim-label"]
+                }
+              }
+
+              Gtk.Box stats_box {
+                spacing: 16;
+
+                styles ["dim-label"]
+
+                Gtk.Box stars_box {
+                  spacing: 4;
+                  tooltip-text: _("Stars on GitHub");
+                  visible: false;
+
+                  Gtk.Image {
+                    icon-name: "starred-symbolic";
+                  }
+
+                  Gtk.Label stars_label {}
+                }
+
+                Gtk.Box updated_box {
+                  spacing: 4;
+                  tooltip-text: _("Last pushed or released");
+                  visible: false;
+
+                  Gtk.Image {
+                    icon-name: "document-open-recent-symbolic";
+                  }
+
+                  Gtk.Label updated_label {}
+                }
+
+                Gtk.Label slug_label {
+                  use-markup: true;
+                  ellipsize: end;
+                  visible: false;
                 }
               }
 
@@ -203,6 +244,45 @@ template $OscoveryProjectPage: Adw.NavigationPage {
             max-children-per-line: 16;
           }
 
+          Gtk.Box readme_card {
+            orientation: vertical;
+            visible: false;
+
+            styles ["readme-card"]
+
+            Gtk.Box {
+              spacing: 8;
+
+              styles ["readme-card-header"]
+
+              Gtk.Image {
+                icon-name: "accessories-dictionary-symbolic";
+              }
+
+              Gtk.Label readme_name {
+                label: "README";
+                xalign: 0;
+                hexpand: true;
+
+                styles ["heading"]
+              }
+
+              Adw.Spinner readme_spinner {}
+
+              Gtk.Button readme_open_button {
+                icon-name: "external-link-symbolic";
+                tooltip-text: _("Open the README on GitHub");
+                visible: false;
+
+                styles ["flat"]
+              }
+            }
+
+            Adw.Bin readme_body {
+              styles ["readme-body"]
+            }
+          }
+
           Gtk.Label meta_label {
             xalign: 0;
             wrap: true;
@@ -262,6 +342,7 @@ template $OscoveryProjectPage: Adw.NavigationPage {
             }
           }
         };
+      };
       };
     };
   };

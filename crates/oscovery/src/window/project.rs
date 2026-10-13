@@ -1,19 +1,24 @@
-//! A project's page: what it is, how to install it, more by the same
-//! developer, and similar projects.
+//! A project's page: what it is, how to install it, its README as GitHub
+//! shows it, more by the same developer, and similar projects.
 
 use super::OscoveryWindow;
 use crate::i18n::{format, gettext};
 use crate::rt;
 use crate::widgets::entry_card::kind_label;
-use crate::{images, widgets};
+use crate::widgets::markdown::{self as readme_view, OnLink};
+use crate::{config, images, widgets};
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::glib;
 use oscovery_core::db::Query;
 use oscovery_core::install::{self, Action};
+use oscovery_core::markdown;
 use oscovery_core::models::{Entry, InstallMethod};
+use oscovery_core::readme::{self, Readme};
 use oscovery_core::retrieve::fts_any;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+use std::rc::Rc;
 
 const MORE_BY_LIMIT: usize = 12;
 const SIMILAR_LIMIT: usize = 8;
@@ -25,6 +30,8 @@ mod imp {
     #[template(resource = "/io/github/turbinebmw/Oscovery/ui/project-page.ui")]
     pub struct ProjectPage {
         #[template_child]
+        pub scroller: TemplateChild<gtk::ScrolledWindow>,
+        #[template_child]
         pub initials_label: TemplateChild<gtk::Label>,
         #[template_child]
         pub name_label: TemplateChild<gtk::Label>,
@@ -32,6 +39,16 @@ mod imp {
         pub author_button: TemplateChild<gtk::Button>,
         #[template_child]
         pub version_label: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub stars_box: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub stars_label: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub updated_box: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub updated_label: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub slug_label: TemplateChild<gtk::Label>,
         #[template_child]
         pub chips_box: TemplateChild<gtk::FlowBox>,
         #[template_child]
@@ -65,6 +82,16 @@ mod imp {
         #[template_child]
         pub tags_box: TemplateChild<gtk::FlowBox>,
         #[template_child]
+        pub readme_card: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub readme_name: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub readme_spinner: TemplateChild<adw::Spinner>,
+        #[template_child]
+        pub readme_open_button: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub readme_body: TemplateChild<adw::Bin>,
+        #[template_child]
         pub meta_label: TemplateChild<gtk::Label>,
         #[template_child]
         pub more_group: TemplateChild<gtk::Box>,
@@ -79,6 +106,11 @@ mod imp {
 
         pub window: glib::WeakRef<OscoveryWindow>,
         pub entry: RefCell<Option<Entry>>,
+        /// The README's headings, for its `#links`.
+        pub anchors: RefCell<HashMap<String, gtk::Widget>>,
+        /// The README shows the project itself, so the listing's preview
+        /// would only repeat it.
+        pub readme_has_pictures: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -287,19 +319,38 @@ impl ProjectPage {
         imp.description_label
             .set_visible(!entry.description.is_empty());
 
-        let mut meta = Vec::new();
-        if entry.stars > 0 {
-            meta.push(format(
-                &gettext("{n} stars"),
-                &[("n", &entry.stars.to_string())],
-            ));
-        }
+        imp.stars_label
+            .set_text(&widgets::compact_count(entry.stars));
+        imp.stars_box.set_visible(entry.stars > 0);
         if let Some(updated) = entry.updated_at {
-            meta.push(format(
+            imp.updated_label.set_text(&format(
                 &gettext("updated {date}"),
                 &[("date", &updated.format("%-d %b %Y").to_string())],
             ));
+            imp.updated_box.set_visible(true);
         }
+        if let Some(slug) = entry.github_slug() {
+            imp.slug_label.set_markup(&format!(
+                "<a href=\"{}\">{}</a>",
+                markdown::escape(&entry.repo),
+                markdown::escape(&slug)
+            ));
+            imp.slug_label.set_tooltip_text(Some(&entry.repo));
+            imp.slug_label.set_visible(true);
+            imp.slug_label.connect_activate_link(glib::clone!(
+                #[weak]
+                window,
+                #[upgrade_or]
+                glib::Propagation::Proceed,
+                move |_, uri| {
+                    window.open_uri(uri);
+                    glib::Propagation::Stop
+                }
+            ));
+            self.load_readme(slug);
+        }
+
+        let mut meta = Vec::new();
         meta.push(format(
             &gettext("in the catalog since {date}"),
             &[("date", &entry.first_seen.format("%-d %b %Y").to_string())],
@@ -390,8 +441,18 @@ impl ProjectPage {
         ));
 
         if let Some(url) = entry.previews.first() {
-            let preview = imp.preview.clone();
-            images::load_into(&imp.preview, url, move || preview.set_visible(true));
+            images::load_into(
+                &imp.preview,
+                url,
+                glib::clone!(
+                    #[weak(rename_to = page)]
+                    self,
+                    move || {
+                        let imp = page.imp();
+                        imp.preview.set_visible(!imp.readme_has_pictures.get());
+                    }
+                ),
+            );
         }
 
         // More by this developer.
@@ -436,6 +497,95 @@ impl ProjectPage {
                 widgets::fill_cards(&imp.similar_box, &similar);
                 imp.similar_group.set_visible(true);
             }
+        }
+    }
+
+    /// Fetch the README (or its cached copy) and show it under the header;
+    /// the index's excerpt stays when there is none.
+    fn load_readme(&self, slug: String) {
+        let imp = self.imp();
+        imp.readme_card.set_visible(true);
+        let cache = glib::user_cache_dir()
+            .join(config::DIR_NAME)
+            .join("readmes");
+        rt::run(
+            async move { readme::fetch(&slug, &cache).await },
+            glib::clone!(
+                #[weak(rename_to = page)]
+                self,
+                move |result| match result {
+                    Ok(Some(readme)) => page.show_readme(readme),
+                    Ok(None) => page.imp().readme_card.set_visible(false),
+                    Err(error) => {
+                        tracing::info!("readme: {error}");
+                        let imp = page.imp();
+                        imp.readme_spinner.set_visible(false);
+                        let label = gtk::Label::builder()
+                            .label(format(
+                                &gettext("The README could not be loaded: {error}"),
+                                &[("error", &error.to_string())],
+                            ))
+                            .xalign(0.0)
+                            .wrap(true)
+                            .build();
+                        label.add_css_class("dim-label");
+                        imp.readme_body.set_child(Some(&label));
+                    }
+                }
+            ),
+        );
+    }
+
+    fn show_readme(&self, readme: Readme) {
+        let imp = self.imp();
+        imp.readme_spinner.set_visible(false);
+        imp.readme_name.set_text(&readme.name);
+        let html_url = readme.html_url.clone();
+        imp.readme_open_button.set_visible(true);
+        imp.readme_open_button.connect_clicked(glib::clone!(
+            #[weak(rename_to = page)]
+            self,
+            move |_| page.follow(&html_url)
+        ));
+        if readme.is_markdown() {
+            let blocks = markdown::parse(&readme.text, &readme.base);
+            let on_link: OnLink = Rc::new(glib::clone!(
+                #[weak(rename_to = page)]
+                self,
+                move |uri: &str| page.follow(uri)
+            ));
+            let rendered = readme_view::render(&blocks, on_link);
+            imp.readme_body.set_child(Some(&rendered.widget));
+            imp.anchors.replace(rendered.anchors);
+            if markdown::has_pictures(&blocks) {
+                imp.readme_has_pictures.set(true);
+                imp.preview.set_visible(false);
+            }
+        } else {
+            imp.readme_body
+                .set_child(Some(&readme_view::plain_text(&readme.text)));
+        }
+        // The README is what the excerpt was cut from.
+        imp.description_label.set_visible(false);
+    }
+
+    /// A link in the README: its own `#headings` scroll the page, the rest
+    /// open in the browser.
+    fn follow(&self, uri: &str) {
+        let imp = self.imp();
+        if let Some(anchor) = uri.strip_prefix('#') {
+            let anchors = imp.anchors.borrow();
+            let Some(heading) = anchors.get(&anchor.to_lowercase()) else {
+                return;
+            };
+            let adjustment = imp.scroller.vadjustment();
+            if let Some(point) =
+                heading.compute_point(&*imp.scroller, &gtk::graphene::Point::new(0.0, 0.0))
+            {
+                adjustment.set_value(adjustment.value() + point.y() as f64 - 12.0);
+            }
+        } else if let Some(window) = imp.window.upgrade() {
+            window.open_uri(uri);
         }
     }
 }

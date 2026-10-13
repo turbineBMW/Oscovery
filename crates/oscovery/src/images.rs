@@ -1,10 +1,12 @@
 //! Preview images: fetched once into `~/.cache/oscovery/images/`, decoded
 //! off the main thread (the marketplace serves WebP, which GTK's own loaders
-//! don't read and a pixbuf loader for may not be installed), and shown as a
+//! don't read and a pixbuf loader for may not be installed; README badges
+//! are SVG, which GTK reads and the `image` crate doesn't), and shown as a
 //! texture. A picture that can't be loaded stays on its fallback; nothing is
 //! retried within a run.
 
 use crate::rt;
+use gtk::prelude::*;
 use gtk::{gdk, glib};
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
@@ -40,12 +42,6 @@ fn cache_path(url: &str) -> PathBuf {
         .join(hex::encode(Sha256::digest(url.as_bytes())))
 }
 
-struct Decoded {
-    width: u32,
-    height: u32,
-    rgba: Vec<u8>,
-}
-
 /// Show `url` in `picture` once it is here; `on_shown` runs then, for the
 /// caller to swap a placeholder out.
 pub fn load_into(picture: &gtk::Picture, url: &str, on_shown: impl Fn() + 'static) {
@@ -61,15 +57,7 @@ pub fn load_into(picture: &gtk::Picture, url: &str, on_shown: impl Fn() + 'stati
             #[weak]
             picture,
             move |result| match result {
-                Ok(decoded) => {
-                    let stride = decoded.width as usize * 4;
-                    let texture = gdk::MemoryTexture::new(
-                        decoded.width as i32,
-                        decoded.height as i32,
-                        gdk::MemoryFormat::R8g8b8a8,
-                        &glib::Bytes::from_owned(decoded.rgba),
-                        stride,
-                    );
+                Ok(texture) => {
                     picture.set_paintable(Some(&texture));
                     on_shown();
                 }
@@ -82,7 +70,7 @@ pub fn load_into(picture: &gtk::Picture, url: &str, on_shown: impl Fn() + 'stati
     );
 }
 
-async fn load(url: &str, path: &Path) -> Result<Decoded, String> {
+async fn load(url: &str, path: &Path) -> Result<gdk::Texture, String> {
     let bytes = match tokio::fs::read(path).await {
         Ok(bytes) => bytes,
         Err(_) => fetch(url, path).await?,
@@ -116,17 +104,28 @@ async fn fetch(url: &str, target: &Path) -> Result<Vec<u8>, String> {
     Ok(bytes.to_vec())
 }
 
-fn decode(bytes: &[u8]) -> Result<Decoded, String> {
-    let image = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
+fn decode(bytes: &[u8]) -> Result<gdk::Texture, String> {
+    let image = match image::load_from_memory(bytes) {
+        Ok(image) => image,
+        // SVG, and whatever else GTK reads itself.
+        Err(error) => {
+            return gdk::Texture::from_bytes(&glib::Bytes::from(bytes))
+                .map_err(|_| error.to_string());
+        }
+    };
     let image = if image.width().max(image.height()) > MAX_EDGE {
         image.thumbnail(MAX_EDGE, MAX_EDGE)
     } else {
         image
     };
     let rgba = image.to_rgba8();
-    Ok(Decoded {
-        width: rgba.width(),
-        height: rgba.height(),
-        rgba: rgba.into_raw(),
-    })
+    let (width, height) = rgba.dimensions();
+    Ok(gdk::MemoryTexture::new(
+        width as i32,
+        height as i32,
+        gdk::MemoryFormat::R8g8b8a8,
+        &glib::Bytes::from_owned(rgba.into_raw()),
+        width as usize * 4,
+    )
+    .upcast())
 }

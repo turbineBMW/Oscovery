@@ -1,4 +1,5 @@
 pub mod entry_card;
+pub mod markdown;
 
 use crate::window::OscoveryWindow;
 use entry_card::EntryCard;
