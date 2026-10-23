@@ -52,6 +52,11 @@ crates/oscovery-core/src/  no widgets; everything here is unit-tested (`cargo te
   install.rs   install_action (omarchy-plugin-add --yes | omarchy-plugin-enable | yay in a
                terminal | manual), enable/disable/remove, run, installed_plugins (--json)
   review.rs    security review: source_url, shallow clone, prompt, parse (verdict + findings)
+  readme.rs    a repo's README from GitHub's API, cached with its ETag (fresh 1 h, 304s
+               free, stale copy when offline or rate-limited); Base for relative URLs
+  markdown.rs  README -> blocks with Pango markup: GFM (tables, tasks, alerts, bare URLs,
+               shortcodes) plus README HTML (align, sized <img>, badges, <details>,
+               <picture> dark source, #gh-dark-mode-only); GitHub's heading anchors
   omarchy.rs   Omarchy colors.toml -> libadwaita CSS variables (ported from Skali/Rustle)
 crates/oscovery-index/     the crawler, run by .github/workflows/index.yml daily onto Pages:
   main.rs      `build --out site [--state d] [--marketplace src] [--no-github]
@@ -88,7 +93,8 @@ crates/oscovery/src/       the GTK layer
                project.rs (ProjectPage: install/enable/disable/remove with a confirm
                showing the command, more by author, similar), author.rs, review.rs (the
                review page), discover.rs (the conversation: bubbles, match cards, extend)
-  widgets/     entry_card.rs (EntryCard template), mod.rs (chips, fill_cards, initials)
+  widgets/     entry_card.rs (EntryCard template), mod.rs (chips, fill_cards, initials),
+               markdown.rs (README blocks -> widgets: labels, code + copy, grid, pictures)
   images.rs    preview fetch -> ~/.cache/oscovery/images, decode off-thread -> MemoryTexture
   dialogs/     preferences.rs (agent, model, index URL, theme)
   ui/*.blp     Blueprint templates; the Rust attribute names must match the ids

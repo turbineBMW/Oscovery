@@ -92,3 +92,74 @@
 .bubble.error {
   background-color: color-mix(in srgb, var(--error-bg-color) 25%, var(--card-bg-color));
 }
+
+/* A README, laid out the way github.com lays it out. */
+.readme-card {
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--window-fg-color) 15%, transparent);
+}
+.readme-card-header {
+  padding: 6px 6px 6px 16px;
+  min-height: 34px;
+  border-bottom: 1px solid color-mix(in srgb, var(--window-fg-color) 15%, transparent);
+}
+.readme-body {
+  padding: 24px 32px 32px;
+}
+.readme-h1, .readme-h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid color-mix(in srgb, var(--window-fg-color) 15%, transparent);
+}
+.readme-h1 { font-size: 2em; font-weight: 600; }
+.readme-h2 { font-size: 1.5em; font-weight: 600; }
+.readme-h3 { font-size: 1.25em; font-weight: 600; }
+.readme-h4 { font-weight: 600; }
+.readme-h5 { font-size: 0.875em; font-weight: 600; }
+.readme-h6 { font-size: 0.85em; font-weight: 600; color: var(--dim-label-color); }
+.readme-code {
+  border-radius: 6px;
+  background-color: color-mix(in srgb, var(--window-fg-color) 6%, transparent);
+}
+.readme-code-text {
+  font-family: monospace;
+  font-size: 0.9em;
+  padding: 14px 16px;
+}
+.readme-quote {
+  padding-left: 1em;
+  border-left: 0.25em solid color-mix(in srgb, var(--window-fg-color) 20%, transparent);
+  color: var(--dim-label-color);
+}
+.readme-alert {
+  padding: 8px 0 8px 1em;
+  border-left: 0.25em solid var(--accent-color);
+}
+.readme-alert-title { font-weight: 600; }
+.readme-alert.note { border-left-color: var(--accent-color); }
+.readme-alert.note .readme-alert-title { color: var(--accent-color); }
+.readme-alert.tip { border-left-color: var(--success-color); }
+.readme-alert.tip .readme-alert-title { color: var(--success-color); }
+.readme-alert.important { border-left-color: var(--purple-3); }
+.readme-alert.important .readme-alert-title { color: var(--purple-3); }
+.readme-alert.warning { border-left-color: var(--warning-color); }
+.readme-alert.warning .readme-alert-title { color: var(--warning-color); }
+.readme-alert.caution { border-left-color: var(--error-color); }
+.readme-alert.caution .readme-alert-title { color: var(--error-color); }
+.readme-table {
+  border-top: 1px solid color-mix(in srgb, var(--window-fg-color) 15%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--window-fg-color) 15%, transparent);
+}
+.readme-cell {
+  padding: 6px 13px;
+  border-right: 1px solid color-mix(in srgb, var(--window-fg-color) 15%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--window-fg-color) 15%, transparent);
+}
+.readme-cell.head { font-weight: 600; }
+.readme-cell.alt {
+  background-color: color-mix(in srgb, var(--window-fg-color) 4%, transparent);
+}
+separator.readme-rule {
+  min-height: 4px;
+  border-radius: 2px;
+  background-color: color-mix(in srgb, var(--window-fg-color) 15%, transparent);
+}
